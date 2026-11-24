@@ -11,7 +11,8 @@ const SHELL = [
     .flatMap(f => ["fonts/" + f + "-Regular.ttf", "fonts/" + f + "-Bold.ttf"])
 ];
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" skips the browser's HTTP cache so a new version never caches old files.
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("ccb-") && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -20,7 +21,8 @@ self.addEventListener("fetch", (e) => {
   const req = e.request; if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (req.mode === "navigate") {
-    e.respondWith(fetch(req).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put("index.html", copy)); return r; })
+    // GitHub Pages lets browsers reuse a page for 10 minutes; "no-cache" asks the server every time (cheap: unchanged pages return "not modified").
+    e.respondWith(fetch(req, { cache: "no-cache" }).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put("index.html", copy)); return r; })
       .catch(() => caches.match("index.html", { ignoreSearch: true })));
     return;
   }
