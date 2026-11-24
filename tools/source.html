@@ -673,7 +673,7 @@ const isLetter = (ch) => !!ch && /[\p{L}\p{M}'’]/u.test(ch);
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
 function typeFromLabel(label) {
-  const l = (label || "").toLowerCase();
+  const l = (label || "").toLowerCase().replace(/\([^)]*\)/g, " ");
   if (/pre[\s-]*chorus|channel|lift/.test(l)) return "prechorus";
   if (/chorus|refrain/.test(l)) return "chorus";
   if (/verse/.test(l)) return "verse";
@@ -687,7 +687,10 @@ function typeFromLabel(label) {
   return "other";
 }
 const LABEL_WORD = "(?:pre[\\s-]?chorus|chorus|refrain|verse|bridge|tag|intro|outro|coda|ending|interlude|turnaround|instrumental|solo|vamp)(?:\\s*\\d+)?";
-const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*x\\s*\\d+\\s*\\)?)?\\s*$", "i");
+const LABEL_MOD = "(?:(?:breakdown|final|last|first|half|double|soft|quiet|big|acoustic|a\\s?cappella|reprise|modulated|key\\s+change|extended|short|full|band|drum|piano)\\s+)?";
+const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*x\\s*\\d+\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,40}?)\\s*\\))?\\s*:?\\s*$", "i");
+// "Outro (over Chorus)" keeps its note; the note doesn't decide the section type.
+function labelFrom(m) { return normLabel(m[1]) + (m[2] && !/^x\s*\d+$/i.test(m[2]) ? " (" + m[2].trim() + ")" : ""); }
 function normLabel(raw) {
   const r0 = raw.trim(); const base = r0 === r0.toUpperCase() ? r0.toLowerCase() : r0;
   return base.replace(/\s+/g, " ").replace(/(\D)(\d)/, "$1 $2").replace(/\s+/g, " ")
@@ -751,6 +754,24 @@ function chordParts(tok) {
   return null;
 }
 const BAR_RE = /^(\|+:?|:?\|+|\/|-|x\d+|\(x\d+\)|%|\|\||\.)$/i;
+// "Eb – F" or "Eb–F" (en/em dash) on a chord line means two chords over one word: keep them as one "Eb-F" chord
+// at the first chord's position. A spaced plain hyphen ("C - G") is left alone: charts use it to mirror a
+// hyphenated syllable below, with each chord on its own syllable. Same length in, same length out, so every other chord keeps its column.
+function joinDashChords(line) {
+  if (!/[–—]/.test(line)) return line;
+  const ch = line.split(""); const toks = []; const re = /\S+/g; let m;
+  while ((m = re.exec(line))) toks.push({ s: m[0], i: m.index });
+  toks.forEach(t => { if (/^[^–—]+[–—][^–—]+$/.test(t.s) && t.s.split(/[–—]/).every(p => isChord(p))) { const k = t.s.search(/[–—]/); ch[t.i + k] = "-"; t.s = t.s.replace(/[–—]/, "-"); } });
+  for (let a = 0; a + 2 < toks.length; a++) {
+    const L = toks[a], D = toks[a + 1], R = toks[a + 2];
+    if (!/^[–—]$/.test(D.s) || !chordParts(L.s) || !chordParts(R.s)) continue;
+    const joined = L.s + "-" + R.s; const end = R.i + R.s.length;
+    for (let q = L.i; q < end; q++) ch[q] = q - L.i < joined.length ? joined[q - L.i] : " ";
+    toks.splice(a, 3, { s: joined, i: L.i }); a--;
+  }
+  const out = ch.join("");
+  return isChordLine(out) ? out : line;
+}
 function isChordLine(s) {
   const toks = s.trim().split(/\s+/).filter(Boolean); if (!toks.length) return false;
   let n = 0;
@@ -793,7 +814,7 @@ function metaLine(meta, line, early) {
 }
 function parseSongText(input, opts) {
   opts = opts || {};
-  const raw = input.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\t/g, "    ").split("\n");
+  const raw = input.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\t/g, "    ").split("\n").map(l => /\[/.test(l) ? l : joinDashChords(l));
   const meta = { title: "", artist: "", key: "", tempo: "", time: "", copyright: "", ccli: "" };
   if (opts.fromFile && !raw.some(l => /^\s*\{\s*(title|t)\s*:/i.test(l))) {
     const i = raw.findIndex(l => l.trim());
@@ -828,7 +849,7 @@ function parseSongText(input, opts) {
         }
         else if (/^(end_of_|eo[cvbt]$)/.test(k)) { flush(); inEnv = false; }
         else if (k === "chorus") { flush(); blocks.push({ label: v || "Chorus", type: "chorus", lines: [], ref: true }); }
-        else if (["comment", "c", "ci", "comment_italic", "highlight", "cb"].includes(k) && LABEL_RE.test(v)) { flush(); cur = { label: normLabel(LABEL_RE.exec(v)[1]), type: null, lines: [] }; }
+        else if (["comment", "c", "ci", "comment_italic", "highlight", "cb"].includes(k) && LABEL_RE.test(v)) { flush(); cur = { label: labelFrom(LABEL_RE.exec(v)), type: null, lines: [] }; }
         continue;
       }
       if (/^\s*#/.test(line)) continue;
@@ -839,7 +860,7 @@ function parseSongText(input, opts) {
     if (meta.title) { const hm = /^(.+?)\s*[-–]\s*\d+$/.exec(trimmed); if (hm && hm[1].toLowerCase() === meta.title.toLowerCase()) continue; }
     if (HYMNAL_RE.test(trimmed) && !inEnv) { meta.hymnal = meta.hymnal || trimmed; continue; }
     const lm = LABEL_RE.exec(trimmed);
-    if (lm && !inEnv) { flush(); cur = { label: normLabel(lm[1]), type: null, lines: [] }; continue; }
+    if (lm && !inEnv) { flush(); cur = { label: labelFrom(lm), type: null, lines: [] }; continue; }
     if (isCP) {
       ensure().lines.push(collapseHyphens(parseBracketLine(line.replace(/\s+$/, "")), !!opts.spaced));
     } else if (colFormat && isChordLine(line)) {
@@ -2207,7 +2228,7 @@ function pdfColumnLines(items) {
       for (const ch of it.s) { chars.push(it.x + acc * sc); acc += measureCtx.measureText(ch).width; text += ch; }
       lastEnd = it.x + it.w;
     }
-    r.text = text; r.chars = chars; r.end = lastEnd;
+    r.text = joinDashChords(text); r.chars = chars; r.end = lastEnd;
   });
   const tokens = (r) => { const out = []; const re = /\S+/g; let m; while ((m = re.exec(r.text))) out.push({ s: m[0], i: m.index, x: r.chars[m.index], end: r.chars[m.index + m[0].length - 1] + r.h * 0.55 }); return out; };
   const SUFFIX_RE = /^(\d{1,2}|sus\d?|maj\d*|add\d+|m\d*|min\d*|dim\d?|aug|[b#]\d+|\(.+\)|\/[A-G][#b]?)$/i;
