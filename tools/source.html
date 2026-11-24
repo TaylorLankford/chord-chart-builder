@@ -361,6 +361,14 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .menu button:hover, .menu button:focus-visible { background: var(--hover); }
 .menu button b { font-size: 14.5px; }
 .menu button span { font-size: 12.5px; color: var(--muted); }
+.note.ok { color: #0E7F4E; }
+.signlinks { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; font-size: 14px; }
+.signlinks button { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; padding: 4px; cursor: pointer; }
+#sendLink { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; background: var(--bg); font-size: 14px; width: 100%; }
+.recvrow { display: flex; gap: 8px; align-items: baseline; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.recvrow .n { color: var(--muted); width: 20px; }
+.recvrow .k { margin-left: auto; color: var(--muted); font-size: 13px; }
+[hidden] { display: none !important; }
 .modal.narrow{width:min(420px, calc(100vw - 24px))}
 .note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
@@ -405,6 +413,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
         <div class="menu" id="shareMenu" role="menu" hidden>
           <button role="menuitem" id="btnCopy"><b>Copy ChordPro</b><span>Paste into a Planning Center chord chart, OnSong or an email</span></button>
           <button role="menuitem" id="btnSave"><b>Save ChordPro file</b><span>A .txt copy of this song that any chord app can open</span></button>
+          <button role="menuitem" id="btnSendSong" class="fbonly"><b>Send this song</b><span>A link anyone can open to add a copy to their own library</span></button>
           <div class="menusep"></div>
           <button role="menuitem" id="btnShareApp"><b>Share this app</b><span>Send the link by text, email or AirDrop. Each person gets their own library.</span></button>
         </div>
@@ -466,7 +475,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <div class="songlist" id="setRows"></div>
   </div>
   <div id="setEditView" class="setview" hidden>
-    <div style="display:flex;align-items:center;gap:8px"><button class="btn" id="setBack">&lsaquo; Setlists</button><span class="spacer"></span><button class="btn primary" id="setPlay">Perform</button></div>
+    <div style="display:flex;align-items:center;gap:8px"><button class="btn" id="setBack">&lsaquo; Setlists</button><span class="spacer"></span><button class="btn fbonly" id="setSend">Send</button><button class="btn primary" id="setPlay">Perform</button></div>
     <div class="row" style="gap:8px">
       <label class="field grow">Name<input id="setName" placeholder="Sunday, Dec 1"></label>
       <label class="field">Date<input id="setDate" type="date"></label>
@@ -526,18 +535,43 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
   <div class="backup-row"><button class="btn" id="btnBackup">Back up library</button><span class="note">Saves every song, setlist, category and export look in one file. To restore, Import that file.</span></div>
 </div>
 
-<div class="modal narrow" id="signModal" hidden role="dialog" aria-label="Sign in to sync">
-  <h2>Sign in to sync</h2>
-  <p>Use the email and password from your Firebase project. Songs on this device are added to your synced library, and you stay signed in.</p>
+<div class="modal narrow" id="signModal" hidden role="dialog" aria-label="Sign in">
+  <h2 id="signH">Sign in to sync</h2>
+  <p id="signP"></p>
   <form id="signForm" class="row" style="flex-direction:column;align-items:stretch;gap:10px">
     <label class="field">Email<input id="signEmail" type="email" autocomplete="username" required></label>
-    <label class="field">Password<input id="signPass" type="password" autocomplete="current-password" required></label>
+    <label class="field" id="signPassF">Password<input id="signPass" type="password" autocomplete="current-password" minlength="6" required></label>
+    <label class="field" id="signPass2F" hidden>Type the password again<input id="signPass2" type="password" autocomplete="new-password" minlength="6"></label>
     <div class="note bad" id="signErr" hidden></div>
+    <div class="note ok" id="signOk" hidden></div>
     <div class="acts">
       <button class="btn" type="button" id="signCancel">Cancel</button>
       <button class="btn primary" type="submit" id="signGo">Sign in</button>
     </div>
+    <div class="signlinks" id="signLinks"></div>
   </form>
+</div>
+
+<div class="modal narrow" id="sendModal" hidden role="dialog" aria-label="Send">
+  <h2 id="sendH">Send</h2>
+  <p id="sendP"></p>
+  <div id="sendStep1" style="display:flex;flex-direction:column;gap:10px">
+    <label class="field">Your name (shown to the person you send it to)<input id="sendFrom" autocomplete="name" placeholder="Taylor"></label>
+    <div class="note bad" id="sendErr" hidden></div>
+    <div class="acts"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" id="sendMake">Create link</button></div>
+  </div>
+  <div id="sendStep2" hidden style="display:flex;flex-direction:column;gap:10px">
+    <input id="sendLink" readonly aria-label="Link">
+    <div class="acts"><button class="btn" type="button" data-close>Done</button><button class="btn" id="sendCopy">Copy link</button><button class="btn primary" id="sendShare">Share link…</button></div>
+  </div>
+</div>
+
+<div class="modal narrow" id="recvModal" hidden role="dialog" aria-label="Shared with you">
+  <h2 id="recvH">Shared with you</h2>
+  <p id="recvP"></p>
+  <div class="songlist" id="recvList" style="max-height:40vh"></div>
+  <div class="note bad" id="recvErr" hidden></div>
+  <div class="acts"><button class="btn" type="button" data-close>Not now</button><button class="btn primary" id="recvAdd">Add to my library</button></div>
 </div>
 
 <div class="modal" id="newModal" hidden role="dialog" aria-label="New song">
@@ -1406,6 +1440,7 @@ function bindChrome() {
   $("btnCopy").onclick = () => { shareMenu(false); copyChordPro(); };
   $("btnSave").onclick = () => { shareMenu(false); saveFile(); };
   $("btnShareApp").onclick = () => { shareMenu(false); shareApp(); };
+  $("btnSendSong").onclick = () => { shareMenu(false); if (saveTimer) flushSave(); openSend({ kind: "song", songs: [clone(song)] }); };
   $("btnOpen").onclick = openImport;
   $("fileIn").onchange = (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) importFiles(fs); };
   $("btnNew").onclick = () => { $("newTitle").value = ""; $("newArtist").value = ""; $("newText").value = ""; openModal("newModal"); $("newTitle").focus(); };
@@ -1457,7 +1492,7 @@ function toast(msg, actLabel, fn) {
 }
 function hideToast() { $("toast").hidden = true; toastFn = null; }
 function openModal(id) { $("scrim").hidden = false; $(id).hidden = false; }
-function closeModals() { ["newModal", "cpModal", "drawer", "impModal", "signModal", "setDrawer"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
+function closeModals() { ["newModal", "cpModal", "drawer", "impModal", "signModal", "setDrawer", "sendModal", "recvModal"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
 
 /* ---------- ChordPro out ---------- */
 function showChordPro(note) {
@@ -1473,8 +1508,9 @@ function copyChordPro() {
 }
 // The public address of the installed app (the Claude version is private, so it shares this one instead).
 const APP_URL = "https://taylorlankford.github.io/chord-chart-builder/";
+function appUrl() { return IN_CLAUDE || !/^https?:/.test(location.href) || (location.protocol === "http:" && location.hostname !== "localhost") ? APP_URL : location.origin + location.pathname; }
 async function shareApp() {
-  const url = IN_CLAUDE || !/^https:/.test(location.href) ? APP_URL : location.origin + location.pathname;
+  const url = appUrl();
   const text = "Chord Chart Builder: build chord charts, transpose, export PDFs and perform from an iPad. Open the link, then add it to your Home Screen (iPad: Share > Add to Home Screen; PC: the install icon in the address bar).";
   try { if (navigator.share) { await navigator.share({ title: "Chord Chart Builder", text, url }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
   try { await navigator.clipboard.writeText(text + "\n" + url); toast("Link copied. Paste it into a text or email."); }
@@ -1697,30 +1733,59 @@ function renderSyncRow() {
   r.hidden = false;
   r.innerHTML = storeMode === "cloud"
     ? '<span class="note">Syncing as <b></b></span><button class="btn" id="btnSignOut">Sign out</button>'
-    : '<span class="note">Sync songs between your PC and iPad.</span><button class="btn primary" id="btnSignIn">Sign in to sync</button>';
+    : '<span class="note">Sync your songs between devices and send songs to others. It’s free.</span><button class="btn primary" id="btnSignIn">Sign in or create account</button>';
   if (storeMode === "cloud") { r.querySelector("b").textContent = FB.user ? FB.user.email : ""; $("btnSignOut").onclick = signOut; }
-  else $("btnSignIn").onclick = () => { closeModals(); $("signErr").hidden = true; openModal("signModal"); $("signEmail").focus(); };
+  else $("btnSignIn").onclick = () => openSignIn("in");
 }
 async function signOut() {
   await saveChain; await window.firebase.auth().signOut(); location.reload();
 }
+let signMode = "in";
+function openSignIn(m, why) { closeModals(); setSignMode(m, why); openModal("signModal"); $("signEmail").focus(); }
+function setSignMode(m, why) {
+  signMode = m; $("signErr").hidden = true; $("signOk").hidden = true;
+  const T = { in: ["Sign in", "Sign in"], up: ["Create your account", "Create account"], reset: ["Reset your password", "Send reset email"] }[m];
+  $("signH").textContent = T[0]; $("signGo").textContent = T[1];
+  $("signP").textContent = why || (m === "in" ? "Songs on this device are added to your synced library, and you stay signed in."
+    : m === "up" ? "Your account keeps your songs and setlists in sync between your devices. Your library is private to you."
+    : "Enter your account email and we’ll send a link to choose a new password.");
+  $("signPassF").hidden = m === "reset"; $("signPass").required = m !== "reset";
+  $("signPass").autocomplete = m === "up" ? "new-password" : "current-password";
+  $("signPass2F").hidden = m !== "up"; $("signPass2").required = m === "up";
+  $("signLinks").innerHTML = m === "in" ? '<button type="button" data-m="up">New here? Create an account</button><button type="button" data-m="reset">Forgot password?</button>'
+    : '<button type="button" data-m="in">I already have an account</button>';
+}
+function authMessage(c) {
+  return /invalid-credential|wrong-password|user-not-found|invalid-login/.test(c) ? "That email and password don’t match. Check them and try again."
+    : /invalid-email/.test(c) ? "That email address doesn’t look right."
+    : /email-already-in-use/.test(c) ? "There’s already an account with that email. Sign in instead, or reset the password."
+    : /weak-password/.test(c) ? "Choose a password with at least 6 characters."
+    : /admin-restricted|operation-not-allowed/.test(c) ? "New accounts are turned off for this app. Ask the app owner to turn on sign-up in Firebase."
+    : /network/.test(c) ? "Can’t reach the sign-in service. Check your internet connection."
+    : /too-many/.test(c) ? "Too many tries. Wait a few minutes and try again." : "That didn’t work (" + (c || "unknown error") + ").";
+}
 function bindSignIn() {
   $("signCancel").onclick = closeModals;
+  $("signLinks").addEventListener("click", (e) => { const b = e.target.closest("[data-m]"); if (b) { setSignMode(b.dataset.m); $("signEmail").focus(); } });
   $("signForm").onsubmit = async (e) => {
-    e.preventDefault(); const err = $("signErr"); err.hidden = true; $("signGo").disabled = true;
+    e.preventDefault(); const err = $("signErr"); err.hidden = true; $("signOk").hidden = true; $("signGo").disabled = true;
+    const email = $("signEmail").value.trim(), pw = $("signPass").value;
     try {
       if (!window.firebase) await fbInit();
-      await window.firebase.auth().signInWithEmailAndPassword($("signEmail").value.trim(), $("signPass").value);
+      const auth = window.firebase.auth();
+      if (signMode === "reset") {
+        await auth.sendPasswordResetEmail(email);
+        $("signOk").textContent = "If there’s an account for " + email + ", a reset email is on its way. Check spam if you don’t see it."; $("signOk").hidden = false; return;
+      }
+      if (signMode === "up") {
+        if (pw !== $("signPass2").value) { err.textContent = "The two passwords don’t match."; err.hidden = false; return; }
+        await auth.createUserWithEmailAndPassword(email, pw);
+      } else await auth.signInWithEmailAndPassword(email, pw);
       await saveChain; location.reload();
-    } catch (x) {
-      const c = (x && x.code) || "";
-      err.textContent = /invalid-credential|wrong-password|user-not-found|invalid-email/.test(c) ? "That email and password don’t match. Check them and try again."
-        : /network/.test(c) ? "Can’t reach Firebase. Check your internet connection." : /too-many/.test(c) ? "Too many tries. Wait a few minutes and try again." : "Sign-in didn’t work (" + (c || "unknown error") + ").";
-      err.hidden = false;
-    } finally { $("signGo").disabled = false; }
+    } catch (x) { err.textContent = authMessage((x && x.code) || ""); err.hidden = false; }
+    finally { $("signGo").disabled = false; }
   };
 }
-
 async function connectStore() {
   const cl = window.claude;
   const useLocal = () => {
@@ -1775,6 +1840,7 @@ async function connectStore() {
     const remote = songs.get(song.id);
     if (remote && rev === savedRev && !saving && (remote.updatedAt || 0) > (song.updatedAt || 0) && !pop && !editing.size) { song = clone(remote); renderAll(); }
     renderSongList();
+    if (!$("setDrawer").hidden && !$("setEditView").hidden) renderSetEdit();
   }, (err) => { clearTimeout(timer); setStatus("Saved songs are unavailable right now. Use Save file to keep your work.", true); });
 }
 
@@ -2691,13 +2757,116 @@ function bindPerformance() {
   document.addEventListener("visibilitychange", async () => { if (!document.hidden && !$("perf").hidden && navigator.wakeLock) { try { P.wake = await navigator.wakeLock.request("screen"); } catch (e) {} } });
 }
 
+/* ==========================================================================
+   Sending songs and setlists. A link holds a random id; the copy lives in Firestore at shares/<id>,
+   readable by anyone with the link and written only by its signed-in sender. Opening the link shows a
+   preview, and "Add to my library" copies it in (keeping song ids, so a resent song updates the old copy).
+   ========================================================================== */
+let pendingSend = null, sentLink = "";
+function shareId() { const a = new Uint8Array(15); crypto.getRandomValues(a); return Array.from(a, b => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join(""); }
+function openSend(payload) {
+  if (!FB.cfg) { toast("Sending works in the installed app."); return; }
+  if (storeMode !== "cloud" || !FB.user) { openSignIn("in", "Sign in or create a free account to send songs. The people you send to don’t need an account."); return; }
+  pendingSend = payload; closeModals();
+  const n = payload.songs.length; const name = payload.kind === "setlist" ? (payload.setlist.name || "Setlist") : (payload.songs[0].title || "Untitled song");
+  $("sendH").textContent = "Send “" + name + "”";
+  $("sendP").textContent = (payload.kind === "setlist" ? n + " song" + (n === 1 ? "" : "s") + ", in order and in your keys. " : "") + "Anyone with the link can view it and add a copy to their own library. Your library stays private.";
+  $("sendFrom").value = store("ccb.sendFrom") || ""; $("sendErr").hidden = true; $("sendStep1").hidden = false; $("sendStep2").hidden = true;
+  openModal("sendModal"); if (!$("sendFrom").value) $("sendFrom").focus();
+}
+async function makeSendLink() {
+  const from = $("sendFrom").value.trim(); store("ccb.sendFrom", from);
+  const btn = $("sendMake"); btn.disabled = true; $("sendErr").hidden = true;
+  try {
+    const id = shareId(); const p = pendingSend;
+    const data = { owner: FB.user.uid, from: from || "Someone", kind: p.kind, createdAt: Date.now(), songs: p.songs.map(x => { const c = clone(x); delete c.categories; return c; }) };
+    if (p.setlist) data.setlist = { id: p.setlist.id, name: p.setlist.name || "", date: p.setlist.date || "", items: p.setlist.items.map(it => ({ id: it.id, songId: it.songId, key: it.key || "" })) };
+    const write = window.firebase.firestore().collection("shares").doc(id).set(data);
+    await Promise.race([write, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 12000))]);
+    sentLink = appUrl() + "?share=" + id;
+    $("sendLink").value = sentLink; $("sendStep1").hidden = true; $("sendStep2").hidden = false;
+  } catch (e) {
+    const c = (e && e.code) || "";
+    $("sendErr").textContent = c === "timeout" || /unavailable/.test(c) ? "Couldn’t reach the internet. Sending needs a connection; try again when you’re online."
+      : /permission/.test(c) ? "Sending isn’t set up yet: the database rules need the “shares” section. (Ask Claude for the rules.)" : "Couldn’t create the link (" + (c || "unknown error") + ").";
+    $("sendErr").hidden = false;
+  } finally { btn.disabled = false; }
+}
+async function readShare(id) {
+  if (!FB.cfg) throw new Error("cfg");
+  if (!window.firebase) await fbInit();
+  const d = await window.firebase.firestore().collection("shares").doc(id).get();
+  if (!d.exists) throw new Error("gone");
+  return d.data();
+}
+let pendingRecv = null;
+async function checkIncomingShare() {
+  const id = new URLSearchParams(location.search).get("share"); if (!id) return;
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) {}
+  closeModals(); $("recvH").textContent = "Opening a shared link…"; $("recvP").textContent = ""; $("recvList").innerHTML = ""; $("recvErr").hidden = true; $("recvAdd").hidden = true; openModal("recvModal");
+  try {
+    const d = await readShare(id); pendingRecv = d;
+    const n = d.songs.length;
+    $("recvH").textContent = d.kind === "setlist" ? (d.setlist.name || "Setlist") : (d.songs[0].title || "A song");
+    $("recvP").textContent = (d.from || "Someone") + " sent you " + (d.kind === "setlist" ? "a setlist with " + n + " song" + (n === 1 ? "" : "s") : "a song") + ". Add it to your library to edit, transpose, export or perform it. Your copy is yours: their changes won’t overwrite your edits.";
+    const keyOf = (sid) => d.setlist ? ((d.setlist.items.find(it => it.songId === sid) || {}).key || "") : "";
+    const order = d.setlist ? d.setlist.items.map(it => d.songs.find(x => x.id === it.songId)).filter(Boolean) : d.songs;
+    $("recvList").innerHTML = order.map((x, i) => '<div class="recvrow"><span class="n">' + (i + 1) + "</span><b>" + esc(x.title || "Untitled song") + '</b><span class="k">' + esc(keyOf(x.id) || x.key || "") + "</span></div>").join("");
+    $("recvAdd").hidden = false;
+  } catch (e) {
+    $("recvH").textContent = "Couldn’t open that link";
+    $("recvErr").textContent = e && e.message === "gone" ? "This link doesn’t exist anymore. Ask for a new one." : "Check your internet connection and open the link again."; $("recvErr").hidden = false;
+  }
+}
+async function addReceived() {
+  const d = pendingRecv; if (!d) return; $("recvAdd").disabled = true;
+  let added = 0, kept = 0, setChanged = false;
+  try {
+    for (const x of d.songs) {
+      const have = songs.get(x.id);
+      if (have && (have.updatedAt || 0) >= (x.updatedAt || 0)) { kept++; continue; }
+      const c = clone(x); c.categories = have ? (have.categories || []) : []; await persistSong(c); songs.set(c.id, c); added++;
+    }
+    if (d.setlist) {
+      const have = setlists.get(d.setlist.id);
+      const sl = Object.assign({}, d.setlist, { updatedAt: Date.now() });
+      if (!have || JSON.stringify(have.items) !== JSON.stringify(sl.items) || have.name !== sl.name) { setlists.set(sl.id, sl); await persistSetlist(sl); setChanged = true; }
+    }
+    closeModals(); renderSongList();
+    await saveChain;
+    toast(d.kind === "setlist" ? (!setChanged && !added ? "You already have this setlist." : "Added the setlist “" + (d.setlist.name || "Setlist") + "”" + (kept ? " (" + kept + " song" + (kept === 1 ? " was" : "s were") + " already up to date)" : "")) : (kept ? "You already have the latest copy of this song." : "Added “" + (d.songs[0].title || "song") + "” to your library."));
+    if (d.kind === "setlist") { curSet = clone(setlists.get(d.setlist.id)); openSetlists(); }
+    else { const s0 = songs.get(d.songs[0].id); if (s0) loadSong(clone(s0), false); }
+  } catch (e) { $("recvErr").textContent = "Couldn’t add it. Try again in a moment."; $("recvErr").hidden = false; }
+  finally { $("recvAdd").disabled = false; }
+}
+function bindSending() {
+  document.querySelectorAll("#sendModal [data-close], #recvModal [data-close]").forEach(b => b.onclick = closeModals);
+  $("sendMake").onclick = makeSendLink;
+  $("sendFrom").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); makeSendLink(); } });
+  $("sendCopy").onclick = async () => { try { await navigator.clipboard.writeText(sentLink); toast("Link copied."); } catch (e) { $("sendLink").select(); } };
+  $("sendShare").onclick = async () => {
+    const t = $("sendH").textContent.replace(/^Send /, "");
+    try { if (navigator.share) { await navigator.share({ title: t, text: t + " (from Chord Chart Builder)", url: sentLink }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(sentLink); toast("Link copied. Paste it into a text or email."); } catch (e) { $("sendLink").select(); }
+  };
+  $("recvAdd").onclick = addReceived;
+  $("setSend").onclick = () => {
+    if (!curSet) return; const its = curSet.items.filter(it => songs.get(it.songId));
+    if (!its.length) { toast("Add songs to the setlist first."); return; }
+    const ids = [...new Set(its.map(it => it.songId))];
+    openSend({ kind: "setlist", setlist: Object.assign({}, curSet, { items: its }), songs: ids.map(id => clone(songs.get(id))) });
+  };
+  if (!FB.cfg) document.querySelectorAll(".fbonly").forEach(el => el.hidden = true);
+}
+
 /* ---------- Boot ---------- */
-bindEditor(); bindChrome(); bindExport(); bindImport(); bindSignIn(); bindSetlists(); bindPerformance();
+bindEditor(); bindChrome(); bindExport(); bindImport(); bindSignIn(); bindSetlists(); bindPerformance(); bindSending();
 song = exampleSong(); renderAll();
 if (store("ccb.preview") !== "0" && window.innerWidth >= 1100) setPreview(true);
 setStatus("");
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { markCrowded($("sections")); markCrowded($("sheet")); });
-connectStore();
+connectStore().then(() => setTimeout(checkIncomingShare, 300));
 window.addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
 ["online", "offline"].forEach(t => window.addEventListener(t, () => { if (storeMode !== "cloud") return; setStatus(navigator.onLine ? "Back online. Syncing…" : "Offline. Changes sync when you’re back online."); if (navigator.onLine) setTimeout(() => setStatus("All changes saved"), 2500); }));
 document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
