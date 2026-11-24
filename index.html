@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script src="firebase-config.js"></script>
 <style>html,body{margin:0;padding:0}*,*::before,*::after{box-sizing:border-box}</style>
 <title>Chord Chart Builder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -311,6 +312,8 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 }
 @media (prefers-reduced-motion: no-preference) { .btn, .mini, .obadge { transition: background-color .12s, filter .12s; } }
 .backup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:10px;border-top:1px solid var(--line, rgba(127,127,127,.25))}
+.modal.narrow{width:min(420px, calc(100vw - 24px))}
+.note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
 </style>
 </head>
@@ -414,7 +417,22 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
   <div class="letters" id="letters"></div>
   <div class="songlist" id="songList"></div>
   <div class="note" id="storeNote"></div>
+  <div class="backup-row" id="syncRow" hidden></div>
   <div class="backup-row"><button class="btn" id="btnBackup">Back up library</button><span class="note">Saves every song, category and export look in one file. To restore, Import that file.</span></div>
+</div>
+
+<div class="modal narrow" id="signModal" hidden role="dialog" aria-label="Sign in to sync">
+  <h2>Sign in to sync</h2>
+  <p>Use the email and password from your Firebase project. Songs on this device are added to your synced library, and you stay signed in.</p>
+  <form id="signForm" class="row" style="flex-direction:column;align-items:stretch;gap:10px">
+    <label class="field">Email<input id="signEmail" type="email" autocomplete="username" required></label>
+    <label class="field">Password<input id="signPass" type="password" autocomplete="current-password" required></label>
+    <div class="note bad" id="signErr" hidden></div>
+    <div class="acts">
+      <button class="btn" type="button" id="signCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="signGo">Sign in</button>
+    </div>
+  </form>
 </div>
 
 <div class="modal" id="newModal" hidden role="dialog" aria-label="New song">
@@ -1308,7 +1326,7 @@ function toast(msg, actLabel, fn) {
 }
 function hideToast() { $("toast").hidden = true; toastFn = null; }
 function openModal(id) { $("scrim").hidden = false; $(id).hidden = false; }
-function closeModals() { ["newModal", "cpModal", "drawer", "impModal"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
+function closeModals() { ["newModal", "cpModal", "drawer", "impModal", "signModal"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
 
 /* ---------- ChordPro out ---------- */
 function showChordPro(note) {
@@ -1399,7 +1417,8 @@ function renderLibrary() {
   const catName = (id) => (categories.find(c => c.id === id) || {}).name;
   $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '"><button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button><button class="del" data-del="' + esc(s.id) + '">Delete</button></div>').join("")).join("")
     : '<div class="note">' + (q ? "No songs match “" + esc(q) + "”." : all.length ? "No songs in this category yet. Open a song and tick the category under its title." : "No saved songs yet. Songs save automatically as you edit.") + "</div>";
-  $("storeNote").textContent = storeMode === "db" ? "Songs are saved to your account, so they show up on your computer and your iPad." : storeMode === "device" ? "Songs are saved on this device and work with no internet. Back up now and then to keep a copy." : storeMode === "local" ? "Songs are saved in this browser only. Use Save file to keep a copy." : "Connecting to your saved songs…";
+  renderSyncRow();
+  $("storeNote").textContent = storeMode === "db" ? "Songs are saved to your account, so they show up on your computer and your iPad." : storeMode === "cloud" ? (navigator.onLine ? "Songs sync between your devices through your Firebase account." : "You’re offline. Changes are kept on this device and sync when you’re back online.") : storeMode === "device" ? "Songs are saved on this device and work with no internet. Back up now and then to keep a copy." : storeMode === "local" ? "Songs are saved in this browser only. Use Save file to keep a copy." : "Connecting to your saved songs…";
 }
 function onSongListClick(e) {
   const o = e.target.closest("[data-open]"); const d = e.target.closest("[data-del]");
@@ -1489,6 +1508,77 @@ const browserDownloads = {
 };
 const IN_CLAUDE = !!(window.claude && window.claude.use);
 
+/* ---------- Firebase sync (installed app only, when firebase-config.js provides a project).
+   Firestore keeps its own offline copy, so the app works without internet and catches up later.
+   Data lives under users/<uid>/..., and the database rules only let that signed-in user in. ---------- */
+const FB = { cfg: (!IN_CLAUDE && window.CCB_FIREBASE && window.CCB_FIREBASE.projectId) ? window.CCB_FIREBASE : null, app: null, user: null };
+const FB_LIBS = ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"];
+async function fbInit() {
+  for (const f of FB_LIBS) await loadScriptRaw("vendor/" + f).catch(() => loadScriptRaw("https://www.gstatic.com/firebasejs/10.14.1/" + f));
+  const fb = window.firebase; FB.app = fb.apps.length ? fb.app() : fb.initializeApp(FB.cfg);
+  const fs = fb.firestore();
+  try { fs.settings({ ignoreUndefinedProperties: true, merge: true }); } catch (e) {}
+  if (window.CCB_EMULATOR) { fs.useEmulator("localhost", 8085); fb.auth().useEmulator("http://localhost:9099"); }
+  try { await fs.enablePersistence({ synchronizeTabs: true }); } catch (e) { /* another tab or private mode: works online only */ }
+  FB.user = await new Promise(res => { const off = fb.auth().onAuthStateChanged(u => { off(); res(u); }); });
+  return fb;
+}
+function makeCloudDb(fs, uid) {
+  const base = "users/" + uid + "/";
+  // Writes land in the offline copy at once; the server confirms later. Don't make saves wait for the network.
+  const fire = (p) => { p.catch(e => { setStatus("Sync problem: " + ((e && e.code) || "unknown") + ". Your work is kept on this device.", true); }); return Promise.resolve(); };
+  return {
+    doc: (path) => { const r = fs.doc(base + path); return { set: (d) => fire(r.set(d)), delete: () => fire(r.delete()), get: () => r.get(), onSnapshot: (cb, err) => r.onSnapshot(cb, err) }; },
+    collection: (name) => fs.collection(base + name)
+  };
+}
+// First sign-in on a device: copy this device's songs, categories and looks into the synced library (newer copy wins).
+async function mergeDeviceIntoCloud(cloud, uid) {
+  const flag = "ccb.merged." + uid; if (store(flag)) return;
+  const dev = makeDeviceDb();
+  const devSongs = await new Promise((res, rej) => { const off = dev.collection("songs").onSnapshot(s => { off(); res(s.docs.map(d => d.data())); }, rej); });
+  for (const s of devSongs) {
+    const c = await cloud.doc("songs/" + s.id).get().catch(() => null);
+    if (!c || !c.exists || ((c.data() || {}).updatedAt || 0) < (s.updatedAt || 0)) await cloud.doc("songs/" + s.id).set(s);
+  }
+  for (const [path, key] of [["settings/library", "categories"], ["settings/exportLooks", "looks"]]) {
+    const d = await dev.doc(path).get(); if (!d.exists) continue; const mine = (d.data() || {})[key] || [];
+    const c = await cloud.doc(path).get().catch(() => null); const theirs = (c && c.exists && (c.data() || {})[key]) || [];
+    const merged = theirs.concat(mine.filter(x => !theirs.some(y => y.id === x.id)));
+    if (merged.length !== theirs.length) await cloud.doc(path).set({ [key]: merged, updatedAt: Date.now() });
+  }
+  store(flag, "1");
+}
+function renderSyncRow() {
+  const r = $("syncRow"); if (!r) return;
+  if (!FB.cfg) { r.hidden = true; return; }
+  r.hidden = false;
+  r.innerHTML = storeMode === "cloud"
+    ? '<span class="note">Syncing as <b></b></span><button class="btn" id="btnSignOut">Sign out</button>'
+    : '<span class="note">Sync songs between your PC and iPad.</span><button class="btn primary" id="btnSignIn">Sign in to sync</button>';
+  if (storeMode === "cloud") { r.querySelector("b").textContent = FB.user ? FB.user.email : ""; $("btnSignOut").onclick = signOut; }
+  else $("btnSignIn").onclick = () => { closeModals(); $("signErr").hidden = true; openModal("signModal"); $("signEmail").focus(); };
+}
+async function signOut() {
+  await saveChain; await window.firebase.auth().signOut(); location.reload();
+}
+function bindSignIn() {
+  $("signCancel").onclick = closeModals;
+  $("signForm").onsubmit = async (e) => {
+    e.preventDefault(); const err = $("signErr"); err.hidden = true; $("signGo").disabled = true;
+    try {
+      if (!window.firebase) await fbInit();
+      await window.firebase.auth().signInWithEmailAndPassword($("signEmail").value.trim(), $("signPass").value);
+      await saveChain; location.reload();
+    } catch (x) {
+      const c = (x && x.code) || "";
+      err.textContent = /invalid-credential|wrong-password|user-not-found|invalid-email/.test(c) ? "That email and password don’t match. Check them and try again."
+        : /network/.test(c) ? "Can’t reach Firebase. Check your internet connection." : /too-many/.test(c) ? "Too many tries. Wait a few minutes and try again." : "Sign-in didn’t work (" + (c || "unknown error") + ").";
+      err.hidden = false;
+    } finally { $("signGo").disabled = false; }
+  };
+}
+
 async function connectStore() {
   const cl = window.claude;
   const useLocal = () => {
@@ -1501,9 +1591,21 @@ async function connectStore() {
   };
   if (!IN_CLAUDE) {
     downloads = browserDownloads;
-    try { if (!window.indexedDB) throw 0; db = makeDeviceDb(); await db.doc("settings/library").get(); }
-    catch (e) { db = null; useLocal(); return; }
-    storeMode = "device";
+    if (FB.cfg) {
+      try {
+        const fb = await fbInit();
+        if (FB.user) {
+          db = makeCloudDb(fb.firestore(), FB.user.uid); storeMode = "cloud";
+          setStatus("Loading your songs…");
+          try { await mergeDeviceIntoCloud(db, FB.user.uid); } catch (e) {}
+        }
+      } catch (e) { FB.user = null; }
+    }
+    if (storeMode !== "cloud") {
+      try { if (!window.indexedDB) throw 0; db = makeDeviceDb(); await db.doc("settings/library").get(); }
+      catch (e) { db = null; useLocal(); return; }
+      storeMode = "device";
+    }
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   } else {
     try { downloads = await cl.use("downloads"); } catch (e) { downloads = null; }
@@ -1523,8 +1625,8 @@ async function connectStore() {
   }, () => {});
   db.collection("songs").orderBy("updatedAt", "desc").limit(1000).onSnapshot((snap) => {
     songs.clear(); snap.docs.forEach(d => { const v = d.data(); if (v) songs.set(d.id, v); });
-    if (!snap.metadata.fromCache && first) {
-      first = false; clearTimeout(timer); setStatus("All changes saved");
+    if (first && (!snap.metadata.fromCache || (storeMode === "cloud" && (snap.docs.length || !navigator.onLine)))) {
+      first = false; clearTimeout(timer); setStatus(storeMode === "cloud" && !navigator.onLine ? "Offline. Changes sync when you’re back online." : "All changes saved");
       if (!userTouched && song.id === "example") { const last = songs.get(store("ccb.last")) || [...songs.values()][0]; if (last) loadSong(clone(last), false); }
     }
     const remote = songs.get(song.id);
@@ -2160,13 +2262,14 @@ function bindImport() {
 }
 
 /* ---------- Boot ---------- */
-bindEditor(); bindChrome(); bindExport(); bindImport();
+bindEditor(); bindChrome(); bindExport(); bindImport(); bindSignIn();
 song = exampleSong(); renderAll();
 if (store("ccb.preview") !== "0" && window.innerWidth >= 1100) setPreview(true);
 setStatus("");
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { markCrowded($("sections")); markCrowded($("sheet")); });
 connectStore();
 window.addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
+["online", "offline"].forEach(t => window.addEventListener(t, () => { if (storeMode !== "cloud") return; setStatus(navigator.onLine ? "Back online. Syncing…" : "Offline. Changes sync when you’re back online."); if (navigator.onLine) setTimeout(() => setStatus("All changes saved"), 2500); }));
 document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
 window.__ccb = { parseSongText, toChordPro, toRoman, get song() { return song; } };
 })();

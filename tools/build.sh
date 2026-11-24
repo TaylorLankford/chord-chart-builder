@@ -5,7 +5,8 @@ SRC="$1"; OUT="$2"; HERE="$(cd "$(dirname "$0")" && pwd)"; CCB="$(dirname "$SRC"
 mkdir -p "$OUT/fonts" "$OUT/vendor" "$OUT/icons"
 cp "$CCB"/fonts/*.ttf "$OUT/fonts/"; cp "$CCB"/vendor/*.js "$OUT/vendor/"
 [ -f "$OUT/icons/icon-512.png" ] || node "$HERE/icons.js" "$HERE/icon.svg" "$OUT/icons"
-VER=$(cat "$SRC" "$CCB"/vendor/*.js | sha1sum | cut -c1-10)
+[ -f "$OUT/firebase-config.js" ] || printf '// Firebase project settings for sync. Empty = songs stay on each device.\nwindow.CCB_FIREBASE = null;\n' > "$OUT/firebase-config.js"
+VER=$(cat "$SRC" "$CCB"/vendor/*.js "$OUT/firebase-config.js" | sha1sum | cut -c1-10)
 python3 - "$SRC" "$OUT" "$VER" <<'PY'
 import sys
 src, out, ver = sys.argv[1:4]
@@ -23,6 +24,7 @@ head = '''<!doctype html>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script src="firebase-config.js"></script>
 <style>html,body{margin:0;padding:0}*,*::before,*::after{box-sizing:border-box}</style>
 '''
 tail = '''

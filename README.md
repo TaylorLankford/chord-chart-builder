@@ -11,6 +11,3 @@ An installable web app for building chord charts: paste or import lyrics, place 
 - `sw.js`: offline support. `manifest.webmanifest` + `icons/`: install details.
 - `fonts/`: fonts embedded in exported PDFs (SIL Open Font License).
 - `vendor/`: jsPDF, JSZip and pdf.js, shipped with the app so import and export work offline.
-
-## Updating
-`tools/source.html` is the app source (the same file runs as a Claude artifact). `tools/build.sh tools/source.html <outdir>` rebuilds `index.html` and `sw.js` here; it expects `fonts/` and `vendor/` next to the source, so run it from a working copy that has them.

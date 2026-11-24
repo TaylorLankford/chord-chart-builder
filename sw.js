@@ -1,10 +1,11 @@
 // Offline support. The app shell is cached on install; index.html is fetched fresh when online
 // (so updates arrive), and everything else is served from the cache first.
-const VERSION = "f2b89ee8da";
+const VERSION = "14c12c1910";
 const CACHE = "ccb-" + VERSION;
 const SHELL = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
+  "firebase-config.js", "vendor/firebase-app-compat.js", "vendor/firebase-auth-compat.js", "vendor/firebase-firestore-compat.js",
   "vendor/jspdf.umd.min.js", "vendor/jszip.min.js", "vendor/pdf.min.js", "vendor/pdf.worker.min.js",
   ...["AtkinsonHyperlegible", "Lato", "OpenSans", "SourceSans3", "Merriweather", "CourierPrime"]
     .flatMap(f => ["fonts/" + f + "-Regular.ttf", "fonts/" + f + "-Bold.ttf"])
