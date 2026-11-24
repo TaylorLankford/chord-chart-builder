@@ -316,7 +316,10 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .drawer.right { left: auto; right: 0; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .setview { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1; }
 .setview[hidden] { display: none; }
-.setitems { display: flex; flex-direction: column; gap: 4px; overflow: auto; max-height: 45vh; }
+.setitems { display: flex; flex-direction: column; gap: 4px; overflow: auto; max-height: 45vh; position: relative; }
+.setitem .t, .setitem .n { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.setitem.dragging { opacity: .4; }
+.setitem .grip { min-height: 34px; padding: 4px 2px; }
 .setitem { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--panel); }
 .setitem .n { width: 22px; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 .setitem .t { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1273,8 +1276,9 @@ function sortable(container, itemSel, startSel, axis, onDrop) {
       if (axis === "y") {
         for (let i = 0; i < items.length; i++) { const r = items[i].getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2) { ins = i; break; } }
         const ref = items[ins] ? items[ins].getBoundingClientRect().top - 7 : items[items.length - 1].getBoundingClientRect().bottom + 4;
-        Object.assign(marker.style, { left: "0px", right: "0px", height: "4px", top: (ref - cr.top) + "px", width: "auto" });
-        if (ev.clientY < 90) window.scrollBy(0, -14); else if (ev.clientY > window.innerHeight - 60) window.scrollBy(0, 14);
+        Object.assign(marker.style, { left: "0px", right: "0px", height: "4px", top: Math.max(container === $("setItems") ? 0 : -1e4, ref - cr.top + container.scrollTop) + "px", width: "auto" });
+        if (container.scrollHeight > container.clientHeight + 2) { if (ev.clientY < cr.top + 30) container.scrollTop -= 10; else if (ev.clientY > cr.bottom - 30) container.scrollTop += 10; }
+        else if (ev.clientY < 90) window.scrollBy(0, -14); else if (ev.clientY > window.innerHeight - 60) window.scrollBy(0, 14);
       } else {
         let best = null, bd = Infinity;
         items.forEach((it, i) => { const r = it.getBoundingClientRect(); const d = Math.hypot(ev.clientX - (r.left + r.width / 2), ev.clientY - (r.top + r.height / 2)); if (d < bd) { bd = d; best = i; } });
@@ -2534,7 +2538,7 @@ function renderSetEdit() {
   const its = curSet.items;
   $("setItems").innerHTML = its.length ? its.map((it, i) => {
     const sg = songs.get(it.songId);
-    return '<div class="setitem" data-i="' + i + '"><span class="n">' + (i + 1) + '</span>' +
+    return '<div class="setitem" data-i="' + i + '"><button class="grip" aria-label="Drag to reorder">' + GRIP + '</button><span class="n">' + (i + 1) + '</span>' +
       (sg ? '<span class="t">' + esc(sg.title || "Untitled song") + "</span>" + '<select data-key="' + i + '" aria-label="Key">' + keyOptions(it.key || sg.key || guessKey(sg) || "C") + "</select>"
           : '<span class="t gone">Song was deleted</span>') +
       '<button class="ib" data-up="' + i + '" aria-label="Move up"' + (i ? "" : " disabled") + '>&uarr;</button><button class="ib" data-down="' + i + '" aria-label="Move down"' + (i < its.length - 1 ? "" : " disabled") + '>&darr;</button>' +
@@ -2573,6 +2577,7 @@ function bindSetlists() {
     touchSet(); renderSetEdit();
   });
   $("setPlay").onclick = () => playSetlist(curSet, 0);
+  sortable($("setItems"), ".setitem", ".grip, .setitem .n, .setitem .t", "y", (from, to) => { moveItem(curSet.items, from, to); touchSet(); renderSetEdit(); });
   $("setDel").onclick = async () => {
     const b = $("setDel"); if (!b.classList.contains("confirm")) { b.classList.add("confirm", "primary"); b.textContent = "Tap again to delete"; setTimeout(() => { b.classList.remove("confirm", "primary"); b.textContent = "Delete setlist"; }, 3500); return; }
     const id = curSet.id; clearTimeout(setSaveTimer); setlists.delete(id); curSet = null;
