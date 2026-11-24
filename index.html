@@ -807,7 +807,7 @@ const TYPES = {
 const SH = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const FL = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
 const NOTE = { C:0,"B#":0,"C#":1,Db:1,D:2,"D#":3,Eb:3,E:4,Fb:4,"E#":5,F:5,"F#":6,Gb:6,G:7,"G#":8,Ab:8,A:9,"A#":10,Bb:10,B:11,Cb:11 };
-const CHORD_RE = /^\(?[A-G](?:#|b)?(?:maj|min|dim|aug|sus|add|m|M|°|ø|\+|-|\d|#|b|\(|\)|\/[A-G](?:#|b)?|\/\d+)*\)?$/;
+const CHORD_RE = /^\(?[A-G](?:#|b)?(?:maj|min|dim|aug|sus|add|no|m|M|°|ø|\+|-|\d|#|b|\(|\)|\/[A-G](?:#|b)?|\/\d+)*\)?$/;
 function isChord(t) { return CHORD_RE.test(t) || /^N\.?C\.?$/i.test(t) || (/^[A-G][^-]*(-[A-G][^-]*)+$/.test(t) && t.split("-").every(p => CHORD_RE.test(p))); }
 
 function parseKey(k) {
@@ -893,18 +893,18 @@ function typeFromLabel(label) {
   if (/instrumental|solo/.test(l)) return "instrumental";
   return "other";
 }
-const LABEL_WORD = "(?:pre[\\s-]?chorus|chorus|refrain|verse|bridge|tag|intro|outro|coda|ending|interlude|turnaround|instrumental|solo|vamp)(?:\\s*\\d+)?";
+const LABEL_WORD = "(?:pre[\\s-]?chorus|chorus|refrain|verse|bridge|tag|intro|outro|coda|ending|interlude|turnaround|instrumental|solo|vamp|misc\\.?)(?:\\s*\\d+[a-h]?(?:\\s*\\/\\s*\\d+[a-h]?)*|[a-h](?=\\s*:?\\s*$))?";
 const LABEL_MOD = "(?:(?:breakdown|final|last|first|half|double|soft|quiet|big|acoustic|a\\s?cappella|reprise|modulated|key\\s+change|extended|short|full|band|drum|piano)\\s+)?";
-const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*x\\s*\\d+\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,40}?)\\s*\\))?\\s*:?\\s*$", "i");
+const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*(?:x\\s*\\d+|\\d+\\s*x)\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,40}?)\\s*\\))?\\s*:?\\s*$", "i");
 // "Outro (over Chorus)" keeps its note; the note doesn't decide the section type.
 function labelFrom(m) { return normLabel(m[1]) + (m[2] && !/^x\s*\d+$/i.test(m[2]) ? " (" + m[2].trim() + ")" : ""); }
 function normLabel(raw) {
-  const r0 = raw.trim(); const base = r0 === r0.toUpperCase() ? r0.toLowerCase() : r0;
+  const r0 = raw.trim().replace(/^(pre[\s-]?chorus|chorus|verse|bridge|tag|intro|outro|refrain|interlude|ending)([a-h])$/i, "$1 $2"); const base = r0 === r0.toUpperCase() ? r0.toLowerCase() : r0;
   return base.replace(/\s+/g, " ").replace(/(\D)(\d)/, "$1 $2").replace(/\s+/g, " ")
-    .replace(/pre[\s-]?chorus/i, "Pre-Chorus").replace(/\b\w/g, c => c.toUpperCase());
+    .replace(/pre[\s-]?chorus/i, "Pre-Chorus").replace(/\b\w/g, c => c.toUpperCase()).replace(/(\d)([a-h])\b/g, (m, d, l) => d + l.toUpperCase()).replace(/ ([a-h])$/, (m, l) => " " + l.toUpperCase());
 }
 function abbrOf(sec) {
-  const n = /(\d+)\s*$/.exec(sec.label || "");
+  const n = /(\d+[A-H]?)\s*$/.exec(sec.label || "");
   return TYPES[sec.type].abbr + (n ? n[1] : "");
 }
 function autoLabel(type, song, exceptId) {
@@ -956,7 +956,11 @@ function parseBracketLine(raw) {
 }
 // "C-G" (two chords in one beat) is kept together as one chord label.
 function chordParts(tok) {
-  if (isChord(tok)) return [{ off: 0, name: tok }];
+  // "(Asus" … "A)" : a bracketed pair of chords split over two words; keep the chords, lose the stray bracket.
+  if (isChord(tok)) { const o = (tok.match(/\(/g) || []).length, c = (tok.match(/\)/g) || []).length;
+    if (o > c && tok[0] === "(") return [{ off: 1, name: tok.slice(1) }];
+    if (c > o && tok.endsWith(")")) return [{ off: 0, name: tok.slice(0, -1) }];
+    return [{ off: 0, name: tok }]; }
   if (/^[A-G].*-[A-G]/.test(tok) && tok.split("-").every(isChord)) return [{ off: 0, name: tok }];
   return null;
 }
@@ -1033,21 +1037,37 @@ function parseSongText(input, opts) {
   opts = opts || {};
   const raw = input.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\t/g, "    ").split("\n").map(l => /\[/.test(l) ? l : joinDashChords(l));
   const meta = { title: "", artist: "", key: "", tempo: "", time: "", copyright: "", ccli: "" };
-  if (opts.fromFile && !raw.some(l => /^\s*\{\s*(title|t)\s*:/i.test(l))) {
+  if (opts.fromFile) {
+    // Some printed charts use dots for spaces so the chords line up ("For.my.waking.breath"). Turn them back into spaces.
+    if (raw.filter(l => /^\S{8,}$/.test(l.trim()) && /[^.\s]\.+[^.\s]|^\.+\S/.test(l.trim())).length >= 4)
+      for (let i = 0; i < raw.length; i++) if (!/\s/.test(raw[i].trim()) && /\.\S|\S\./.test(raw[i]) && !/^\S+\.(chorded|pdf|txt|docx?)$/i.test(raw[i].trim())) raw[i] = raw[i].replace(/\.(?!(?:chorded|pdf)\b)/g, " ");
+    // Planning Center's own chord chart header: "Abide [G, 48 bpm, 6/8]" then "[RUMC Worship] by Aaron Keyes, …"
+    const i = raw.findIndex(l => l.trim()); const h = i >= 0 && /^(.+?)\s*\[([A-G][#b]?m?)(?:,\s*(\d+)\s*bpm)?(?:,\s*(\d+\/\d+))?\]\s*$/.exec(raw[i].trim());
+    if (h) {
+      meta.title = h[1].trim(); if (h[3]) meta.tempo = h[3]; if (h[4]) meta.time = h[4]; raw[i] = "";
+      const j = raw.findIndex(l => l.trim()); const by = j >= 0 && /^\[[^\]]*\]\s*(?:by\s+(.+))?$/.exec(raw[j].trim()); if (by) { if (by[1]) meta.artist = by[1].trim(); raw[j] = ""; }
+      for (let k = 0; k < raw.length; k++) if (/^\S+\.chorded$/i.test(raw[k].trim())) raw[k] = "";
+    }
+  }
+  if (opts.fromFile && !meta.title && !raw.some(l => /^\s*\{\s*(title|t)\s*:/i.test(l))) {
     const i = raw.findIndex(l => l.trim());
     const t = i >= 0 ? raw[i].trim() : "";
     if (t && t.length <= 70 && !/[,;]$/.test(t) && !HYMNAL_RE.test(t) && !LABEL_RE.test(t) && !isChordLine(t) && !META_RE.test(t) && !/[\[\]{}]/.test(t)) { meta.title = t; raw[i] = ""; }
   }
   const isCP = raw.some(l => /^\s*\{[a-z_]+.*\}\s*$/i.test(l)) || raw.some(l => /\[[A-G][^\]\s]{0,12}\]/.test(l));
   const colFormat = !isCP && raw.some(l => isChordLine(l));
-  const blocks = []; let cur = null; let inEnv = false; const foot = [];
+  const blocks = []; let cur = null; let inEnv = false; const foot = []; let prevFoot = false;
+  // A long copyright line wraps onto the next line ("… Integrity's Praise! Music | Anchored In" / "Hope Music | Give It A Lift Music").
+  const FOOT_MORE_RE = /\s\|\s|\b(music|songs|publishing|designee|admin\.?|administered|records|ministries|ltd|llc|inc)\b|\.com\b/i;
   const flush = () => { if (cur && (cur.lines.length || cur.label)) blocks.push(cur); cur = null; };
   const ensure = () => { if (!cur) cur = { label: null, type: null, lines: [] }; return cur; };
 
   for (let i = 0; i < raw.length; i++) {
     const line = raw[i];
     const trimmed = line.trim();
-    if (/^(CCLI|©|\(c\)|Copyright|For use solely|Note: Reproduction|www\.ccli)/i.test(trimmed) || /CCLI License/i.test(trimmed)) { foot.push(trimmed); continue; }
+    if (/^(CCLI|©|\(c\)|Copyright|For use solely|Note: Reproduction|www\.ccli)/i.test(trimmed) || /CCLI License/i.test(trimmed)) { foot.push(trimmed); prevFoot = true; continue; }
+    if (prevFoot && trimmed && !inEnv && /^(©|\(c\)|copyright)/i.test(foot[foot.length - 1]) && !/\[/.test(trimmed) && FOOT_MORE_RE.test(trimmed) && !isChordLine(trimmed) && !LABEL_RE.test(trimmed)) { foot[foot.length - 1] += " " + trimmed; continue; }
+    if (trimmed) prevFoot = false;
     if (isCP) {
       const d = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i.exec(line);
       if (d) {
@@ -1074,6 +1094,7 @@ function parseSongText(input, opts) {
     if (!trimmed) { if (!inEnv && cur && cur.lines.length) flush(); continue; }
     if (!inEnv && !/\[/.test(trimmed) && metaLine(meta, trimmed, !blocks.length && !(cur && cur.lines.length))) continue;
     if (/^page \d+ of \d+$/i.test(trimmed) || /\(continued\)$/i.test(trimmed)) continue;
+    if (opts.fromFile && (/^\d{1,2}$/.test(trimmed) || (meta.title && trimmed.toLowerCase() === meta.title.toLowerCase() + " -"))) continue;
     if (meta.title) { const hm = /^(.+?)\s*[-–]\s*\d+$/.exec(trimmed); if (hm && hm[1].toLowerCase() === meta.title.toLowerCase()) continue; }
     if (HYMNAL_RE.test(trimmed) && !inEnv) { meta.hymnal = meta.hymnal || trimmed; continue; }
     const lm = LABEL_RE.exec(trimmed);
@@ -1098,27 +1119,42 @@ function parseSongText(input, opts) {
   if (opts.fromFile && blocks.some(b => b.lines.some(l => l.chords.length))) {
     for (let n = 0; n < 2 && blocks.length > 1; n++) {
       const b = blocks[0];
-      if (b.label || b.ref || !b.lines.length || b.lines.length > 5 || !b.lines.every(l => !l.chords.length && l.text.trim().length <= 80)) break;
+      if (b.label || b.ref || !b.lines.length || b.lines.length > 5 || !b.lines.every(l => !l.chords.length && l.text.trim().length <= 160)) break;
       blocks.shift();
       if (!meta.artist) { const a = b.lines.map(l => l.text.trim()).find(t => t && !DATE_RE.test(t) && !/chord\s*chart/i.test(t) && !/^page\b/i.test(t) && (!meta.title || t.toLowerCase() !== meta.title.toLowerCase())); if (a) meta.artist = a.replace(/^by\s+/i, ""); }
     }
   }
+  // A short leftover line ("(small)", "Jesus") after a section belongs to that section, not a new verse.
+  if (opts.fromFile) for (let i = blocks.length - 1; i > 0; i--) {
+    const b = blocks[i], prev = blocks[i - 1], next = blocks[i + 1];
+    if (!b.label && !b.ref && b.lines.length === 1 && b.lines[0].text.trim().length <= 30 && prev.lines.length && !prev.ref && (!next || next.label || next.ref)) { prev.lines.push(b.lines[0]); blocks.splice(i, 1); }
+  }
   if (opts.fromFile && !meta.artist && blocks.length > 1 && !blocks[0].label && blocks[0].lines.length === 1 && !blocks[0].lines[0].chords.length && blocks[1].label) {
     meta.artist = blocks[0].lines[0].text.trim(); blocks.shift();
   }
-  if (!meta.copyright && foot.length) meta.copyright = foot.join("\n");
+  if (!meta.copyright && foot.length) meta.copyright = foot.join("\n").replace(/©\s*©/g, "©");
   if (meta.hymnal) meta.copyright = meta.hymnal + (meta.copyright ? "\n" + meta.copyright : "");
   if (meta.ccli && !/ccli/i.test(meta.copyright)) meta.copyright = (meta.copyright ? meta.copyright + "\n" : "") + "CCLI Song # " + meta.ccli;
+  if (opts.fromFile) {
+    // A title that wrapped: "Little Drummer Boy (For King And Country" / "Version)" was read as title + artist.
+    if (meta.title && meta.artist && (meta.title.match(/\(/g) || []).length > (meta.title.match(/\)/g) || []).length && /\)$/.test(meta.artist) && meta.artist.length <= 30) { meta.title += " " + meta.artist; meta.artist = ""; }
+    // "G Major" under the title is the key, not the artist.
+    const km = /^([A-G][#b]?)\s+(major|minor)$/i.exec(meta.artist || ""); if (km) { if (!meta.key) meta.key = km[1] + (/minor/i.test(km[2]) ? "m" : ""); meta.artist = ""; }
+  }
   if (opts.fromFile) {
     // The file name is often the cleaner title (Planning Center exports are named by song).
     const a = splitChartName(meta.title), b = splitChartName(opts.fileTitle || "");
     const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const similar = a.title && b.title && (norm(a.title).includes(norm(b.title)) || norm(b.title).includes(norm(a.title)));
     const bad = !a.title || DATE_RE.test(a.title) || a.title.length > 60;
-    const useFile = looksLikeTitle(b.title) && (bad || (opts.batch && !similar));
+    // A title that wrapped onto two lines ("He Has Come For Us (God Rest Ye Merry" / "Gentlemen)") is cut short.
+    const cutShort = a.title && b.title && norm(b.title).startsWith(norm(a.title)) && norm(b.title).length > norm(a.title).length;
+    if (cutShort && meta.artist && norm(b.title) === norm(a.title + " " + meta.artist)) meta.artist = "";
+    const useFile = looksLikeTitle(b.title) && (bad || cutShort || (opts.batch && !similar));
     // A header line we mistook for the title (usually the artist) goes back where it belongs.
     if (useFile && a.title && !bad && !similar && !meta.artist && !/chord\s*chart/i.test(meta.title)) meta.artist = a.title;
     meta.title = useFile ? b.title : (a.title || b.title);
+    if (meta.title && meta.title === meta.title.toUpperCase() && /[A-Z]{3}/.test(meta.title)) meta.title = meta.title.toLowerCase().replace(/(^|[\s(\/"-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
     if (!meta.key) meta.key = a.key || b.key;
   }
   return buildSong(blocks, meta);
@@ -2510,6 +2546,7 @@ async function docxToText(buf) {
 // PDF: read positioned text, rebuild lines (column by column), and re-attach each chord
 // to the lyric character sitting under it, writing the result as ChordPro brackets.
 const measureCtx = document.createElement("canvas").getContext("2d");
+const LIGATURES = { 0xEC: "ff", 0xED: "fi", 0xEE: "fl", 0xEF: "ffi", 0xF0: "ffl" };
 async function pdfToText(buf) {
   await loadScript(PDFJS_URL); await loadScript(PDFJS_WORKER_URL);
   const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
@@ -2518,7 +2555,18 @@ async function pdfToText(buf) {
   for (let pn = 1; pn <= pdf.numPages; pn++) {
     const page = await pdf.getPage(pn); const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
-    const items = tc.items.map(i => Object.assign(i, { str: (i.str || "").replace(/[\u200b-\u200d\ufeff]/g, "") })).filter(i => i.str.trim()).map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height || 10 }));
+    // SongSelect charts draw "fi", "fl" and "ff" as single ligature glyphs with no text mapping, so pdf.js reads them
+    // as "\u0000" ("Burn like a re"). The glyph codes are fixed in their font (Open Sans), so look them up in order.
+    let ligs = null, li = 0;
+    if (tc.items.some(i => (i.str || "").includes("\u0000"))) {
+      ligs = [];
+      try {
+        const ol = await page.getOperatorList(); const O = lib.OPS;
+        for (let j = 0; j < ol.fnArray.length; j++) if (ol.fnArray[j] === O.showText || ol.fnArray[j] === O.showSpacedText)
+          for (const g of ol.argsArray[j][0] || []) if (g && typeof g === "object" && g.unicode === "\u0000") ligs.push(LIGATURES[g.originalCharCode] || "");
+      } catch (e) { ligs = []; }
+    }
+    const items = tc.items.map(i => Object.assign(i, { str: (i.str || "").replace(/\u0000/g, () => ligs ? (ligs[li++] || "") : "").replace(/[\u200b-\u200d\ufeff]/g, "") })).filter(i => i.str.trim()).map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height || 10 }));
     if (!items.length) continue;
     for (const col of splitColumns(items, vp.width)) allLines.push(...pdfColumnLines(col), "");
   }
@@ -2554,13 +2602,31 @@ function pdfColumnLines(items) {
     r.text = joinDashChords(text); r.chars = chars; r.end = lastEnd;
   });
   const tokens = (r) => { const out = []; const re = /\S+/g; let m; while ((m = re.exec(r.text))) out.push({ s: m[0], i: m.index, x: r.chars[m.index], end: r.chars[m.index + m[0].length - 1] + r.h * 0.55 }); return out; };
-  const SUFFIX_RE = /^(\d{1,2}|sus\d?|maj\d*|add\d+|m\d*|min\d*|dim\d?|aug|[b#]\d+|\(.+\)|\/[A-G][#b]?)$/i;
+  const SUFFIX_RE = /^(?:\d{1,2}|o\d*|sus\d?|maj\d*|add\d+|m\d*|min\d*|dim\d?|aug|[b#]\d+|\([^()]*\)|\/[A-G][#b]?)+$/i;
+  // Some printed charts use dots for spaces so chords line up ("For.my.waking.breath"): make them spaces again (same length).
+  if (rows.filter(r => /^\S{8,}$/.test(r.text.trim()) && /[^.\s]\.+[^.\s]|^\.+\S/.test(r.text.trim())).length >= 4)
+    rows.forEach(r => { if (!/\s/.test(r.text.trim()) && /\.\S|\S\./.test(r.text) && !/^\S+\.(chorded|pdf|txt|docx?)$/i.test(r.text.trim())) r.text = r.text.replace(/\./g, " "); });
+  // SongSelect prints D²/F# with the 2 raised, which leaves "D /F#" on the chord row: glue the bass note back on.
+  rows.forEach(r => {
+    let m; const re = /(\S+)( +)(\/[A-G][#b]?)(?=[\s*]|$)/g; const cut = [];
+    while ((m = re.exec(r.text))) if (isChord(m[1].replace(/\/.*/, "")) && m[2].length <= 3) cut.push([m.index + m[1].length, m[2].length]);
+    cut.reverse().forEach(([i, n]) => { r.text = r.text.slice(0, i) + r.text.slice(i + n); r.chars.splice(i, n); });
+  });
+  // Chord rows often carry directions: "(Last time)", "(To Tag)", "(1.)", "A/C#*  (*alt F#m)". Blank those out
+  // (same length, so every chord keeps its column) when what's left is a chord line.
+  rows.forEach(r => {
+    if (isChordLine(r.text)) return;
+    const clean = r.text.replace(/\(([^()]*)\)/g, (m, inner) => { const t = inner.trim(); return t && t.split(/\s+/).every(x => chordParts(x)) ? "(" + t + ")" + " ".repeat(m.length - t.length - 2) : " ".repeat(m.length); })
+      .replace(/([A-G][^\s*]*)\*/g, "$1 ").replace(/(^|\s)\*(?=\s|$)/g, "$1 ");
+    if (clean.trim() && isChordLine(clean)) r.text = clean;
+  });
   // Chord extensions printed as raised small text (C², Dˢᵘˢ) sit on their own row just above the chords: put them back.
   for (let i = 0; i < rows.length - 1; i++) {
     const r = rows[i], n = rows[i + 1]; const rt = tokens(r);
     if (!rt.length || !rt.every(t => SUFFIX_RE.test(t.s)) || r.y - n.y > n.h * 1.1 || !isChordLine(n.text)) continue;
     const nt = tokens(n); let used = 0;
-    rt.forEach(t => { let best = null, bd = n.h * 0.9; nt.forEach(c => { const d = Math.abs(t.x - c.end); if (chordParts(c.s) && d < bd) { bd = d; best = c; } }); if (best) { best.s += t.s; used++; } });
+    rt.forEach(t => { let best = null, bd = n.h * 0.9; nt.forEach(c => { const sl = c.s.indexOf("/"); const end = sl > 0 ? n.chars[c.i + sl - 1] + n.h * 0.6 : c.end; const d = Math.abs(t.x - end); if (chordParts(c.s) && d < bd) { bd = d; best = c; } });
+      if (best) { const sl = best.s.indexOf("/"); const sx = t.s.replace(/^o/, "°"); best.s = sl > 0 ? best.s.slice(0, sl) + sx + best.s.slice(sl) : best.s + sx; used++; } });
     if (used === rt.length) {
       let txt = n.text; nt.slice().sort((a, b) => b.i - a.i).forEach(c => { const orig = n.text.substr(c.i).split(/\s/)[0]; txt = txt.slice(0, c.i) + c.s + txt.slice(c.i + orig.length); });
       const chars = []; let k = 0; const oldT = tokens(n);
@@ -2608,7 +2674,7 @@ async function fileToSong(file, batch) {
   if (ext === "docx") text = await docxToText(await file.arrayBuffer());
   else if (ext === "pdf") { text = await pdfToText(await file.arrayBuffer()); opts.spaced = true; }
   else if (ext === "doc") throw new Error("Old .doc files can’t be read. Open it in Word and save as .docx.");
-  else if (["onsongarchive", "zip", "jpg", "jpeg", "png", "heic"].includes(ext)) throw new Error("This kind of file can’t be imported.");
+  else if (["onsongarchive", "zip", "jpg", "jpeg", "png", "heic", "csv", "xlsx", "xls"].includes(ext)) throw new Error("This kind of file can’t be imported.");
   else text = await file.text();
   if (!text.trim()) throw new Error("The file is empty.");
   const s = parseSongText(text, opts);
@@ -3119,7 +3185,7 @@ connectStore().then(() => setTimeout(checkIncomingShare, 300));
 window.addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
 ["online", "offline"].forEach(t => window.addEventListener(t, () => { if (storeMode !== "cloud") return; setStatus(navigator.onLine ? "Back online. Syncing…" : "Offline. Changes sync when you’re back online."); if (navigator.onLine) setTimeout(() => setStatus("All changes saved"), 2500); }));
 document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
-window.__ccb = { parseSongText, toChordPro, toRoman, get song() { return song; } };
+window.__ccb = { parseSongText, fileToSong, toChordPro, toRoman, get song() { return song; } };
 })();
 </script>
 
