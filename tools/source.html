@@ -208,6 +208,10 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .songrow .t { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .songrow .s { font-size: 12.5px; color: var(--muted); }
 .songrow .del { border: 0; background: transparent; color: var(--muted); padding: 6px 8px; border-radius: 6px; font-size: 12.5px; font-weight: 600; }
+.selbar { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
+.selbar .del { background: var(--warn); color: var(--accent-ink); border-color: transparent; }
+.selbar .del:disabled { background: transparent; color: var(--muted); border-color: var(--line); }
+.songrow .pick { width: 20px; height: 20px; margin: 0 2px 0 8px; flex: none; accent-color: var(--accent); }
 .songrow .del.confirm { color: var(--accent-ink); background: var(--warn); }
 .drawer .note { font-size: 12.5px; color: var(--muted); }
 .drawer { width: min(460px, 94vw); }
@@ -530,6 +534,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <details><summary>Library and categories</summary>
       <ul>
         <li><b>Songs</b> opens your library: search by title, artist or lyrics, jump by letter, or filter by category.</li>
+        <li>To delete many songs at once, click <b>Select</b> at the top of the Library, tick the songs (or <b>Select all shown</b> after picking a category or searching), then <b>Delete</b>.</li>
         <li>Put a song in categories with the chips under its title. <b>Edit categories</b> adds, renames or removes them.</li>
         <li><b>Back up library</b> (bottom of Songs) saves everything in one file. Import that file to restore it.</li>
       </ul>
@@ -653,11 +658,12 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 <div class="scrim" id="scrim" hidden></div>
 
 <div class="drawer" id="drawer" hidden role="dialog" aria-label="Songs">
-  <div style="display:flex;align-items:center;gap:8px"><h2>Library</h2><span class="spacer"></span><button class="btn" id="drawerClose">Close</button></div>
+  <div style="display:flex;align-items:center;gap:8px"><h2>Library</h2><span class="spacer"></span><button class="btn" id="libSelect">Select</button><button class="btn" id="drawerClose">Close</button></div>
   <input type="search" id="songSearch" placeholder="Search title, artist or lyrics">
   <div class="chips" id="catFilter"></div>
   <div class="cat-edit" id="catEdit" hidden></div>
   <div class="letters" id="letters"></div>
+  <div class="selbar" id="selBar" hidden><button class="btn" id="selAll">Select all shown</button><span class="spacer"></span><button class="btn del" id="selDel" disabled>Delete</button></div>
   <div class="songlist" id="songList"></div>
   <div class="note" id="storeNote"></div>
   <div class="backup-row" id="syncRow" hidden></div>
@@ -995,6 +1001,16 @@ function metaLine(meta, line, early) {
   hits.forEach((h, i) => { if (h) applyMeta(meta, h[1], h[2]); else if (!meta.artist) meta.artist = parts[i]; });
   return true;
 }
+// "Way Maker - Chord Chart - G" -> { title: "Way Maker", key: "G" }
+function splitChartName(t) {
+  t = (t || "").trim();
+  const m = /^(.*?)\s*[-–—_]+\s*chord\s*charts?\b\s*(?:[-–—_(]+\s*([A-G][#b♯♭]?m?)(?![a-z]))?.*$/i.exec(t);
+  return m && m[1].trim() ? { title: m[1].trim(), key: (m[2] || "").replace("♯", "#").replace("♭", "b") } : { title: t, key: "" };
+}
+const DATE_RE = /\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b|\b(19|20)\d{2}\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}:\d{2}\b/i;
+function fileTitleOf(name) { return (name || "").replace(/\.[^.]+$/, "").replace(/\s*\(\d+\)\s*$/, "").replace(/_/g, " ").replace(/\s+/g, " ").trim(); }
+// A file name like "Way Maker" is a title; "scan0042" or "doc1" isn't.
+function looksLikeTitle(t) { return !!t && /[a-z]/i.test(t) && !/^(img|scan|doc|document|untitled|file|image|chart|song|lyrics?)[\s\-]*\d*$/i.test(t) && (/\s/.test(t) || /[A-Z]/.test(t)); }
 function parseSongText(input, opts) {
   opts = opts || {};
   const raw = input.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\t/g, "    ").split("\n").map(l => /\[/.test(l) ? l : joinDashChords(l));
@@ -1059,12 +1075,34 @@ function parseSongText(input, opts) {
     }
   }
   flush();
+  // Chord charts often start with a header (artist, writers, a print date) before the first section.
+  // When the song has chords, an unlabeled block with no chords at the very top is that header, not a verse.
+  if (opts.fromFile && blocks.some(b => b.lines.some(l => l.chords.length))) {
+    for (let n = 0; n < 2 && blocks.length > 1; n++) {
+      const b = blocks[0];
+      if (b.label || b.ref || !b.lines.length || b.lines.length > 5 || !b.lines.every(l => !l.chords.length && l.text.trim().length <= 80)) break;
+      blocks.shift();
+      if (!meta.artist) { const a = b.lines.map(l => l.text.trim()).find(t => t && !DATE_RE.test(t) && !/chord\s*chart/i.test(t) && !/^page\b/i.test(t) && (!meta.title || t.toLowerCase() !== meta.title.toLowerCase())); if (a) meta.artist = a.replace(/^by\s+/i, ""); }
+    }
+  }
   if (opts.fromFile && !meta.artist && blocks.length > 1 && !blocks[0].label && blocks[0].lines.length === 1 && !blocks[0].lines[0].chords.length && blocks[1].label) {
     meta.artist = blocks[0].lines[0].text.trim(); blocks.shift();
   }
   if (!meta.copyright && foot.length) meta.copyright = foot.join("\n");
   if (meta.hymnal) meta.copyright = meta.hymnal + (meta.copyright ? "\n" + meta.copyright : "");
   if (meta.ccli && !/ccli/i.test(meta.copyright)) meta.copyright = (meta.copyright ? meta.copyright + "\n" : "") + "CCLI Song # " + meta.ccli;
+  if (opts.fromFile) {
+    // The file name is often the cleaner title (Planning Center exports are named by song).
+    const a = splitChartName(meta.title), b = splitChartName(opts.fileTitle || "");
+    const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const similar = a.title && b.title && (norm(a.title).includes(norm(b.title)) || norm(b.title).includes(norm(a.title)));
+    const bad = !a.title || DATE_RE.test(a.title) || a.title.length > 60;
+    const useFile = looksLikeTitle(b.title) && (bad || (opts.batch && !similar));
+    // A header line we mistook for the title (usually the artist) goes back where it belongs.
+    if (useFile && a.title && !bad && !similar && !meta.artist && !/chord\s*chart/i.test(meta.title)) meta.artist = a.title;
+    meta.title = useFile ? b.title : (a.title || b.title);
+    if (!meta.key) meta.key = a.key || b.key;
+  }
   return buildSong(blocks, meta);
 }
 
@@ -1174,7 +1212,7 @@ let pop = null;                   // {sec, line, pos, existing}
 let display = store("ccb.display") === "numerals" ? "numerals" : "letters";
 const DEFAULT_CATS = [{ id: "hymns", name: "Hymns" }, { id: "praise", name: "Praise Songs" }, { id: "secular", name: "Secular Songs" }];
 let categories = clone(DEFAULT_CATS);
-let libFilter = "all", editingCats = false;
+let libFilter = "all", editingCats = false, selecting = false; const picked = new Set(); let shownIds = [];
 
 /* ---------- Mutations ---------- */
 function commit(fn, opts) {
@@ -1594,6 +1632,9 @@ function bindChrome() {
   $("scrim").onclick = closeModals;
   $("songSearch").addEventListener("input", renderSongList);
   $("songList").addEventListener("click", onSongListClick);
+  $("libSelect").addEventListener("click", () => { selecting = !selecting; picked.clear(); editingCats = false; renderLibrary(); });
+  $("selAll").addEventListener("click", () => { const allOn = shownIds.length && shownIds.every(id => picked.has(id)); if (allOn) picked.clear(); else shownIds.forEach(id => picked.add(id)); renderLibrary(); });
+  $("selDel").addEventListener("click", deletePicked);
   $("toastAct").onclick = () => { const f = toastFn; hideToast(); if (f) f(); };
 
   document.addEventListener("keydown", (e) => {
@@ -1726,12 +1767,42 @@ function renderLibrary() {
   const groups = []; list.forEach(s => { const L = letterOf(s); if (!groups.length || groups[groups.length - 1].L !== L) groups.push({ L, items: [] }); groups[groups.length - 1].items.push(s); });
   $("letters").innerHTML = list.length > 8 ? groups.map(g => '<button data-letter="' + g.L + '">' + g.L + "</button>").join("") : "";
   const catName = (id) => (categories.find(c => c.id === id) || {}).name;
-  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '"><button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button><button class="del" data-del="' + esc(s.id) + '">Delete</button></div>').join("")).join("")
+  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '">' + (selecting ? '<input type="checkbox" class="pick" data-pick="' + esc(s.id) + '" aria-label="Select ' + esc(s.title || "song") + '"' + (picked.has(s.id) ? " checked" : "") + ">" : "") + '<button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button>' + (selecting ? "" : '<button class="del" data-del="' + esc(s.id) + '">Delete</button>') + "</div>").join("")).join("")
     : '<div class="note">' + (q ? "No songs match “" + esc(q) + "”." : all.length ? "No songs in this category yet. Open a song and tick the category under its title." : "No saved songs yet. Songs save automatically as you edit.") + "</div>";
+  shownIds = list.map(s => s.id);
+  [...picked].forEach(id => { if (!songs.has(id)) picked.delete(id); });
+  renderSelBar();
   renderSyncRow();
   $("storeNote").textContent = storeMode === "db" ? "Songs are saved to your account, so they show up on your computer and your iPad." : storeMode === "cloud" ? (navigator.onLine ? "Songs sync between your devices through your Firebase account." : "You’re offline. Changes are kept on this device and sync when you’re back online.") : storeMode === "device" ? "Songs are saved on this device and work with no internet. Back up now and then to keep a copy." : storeMode === "local" ? "Songs are saved in this browser only. Use Save file to keep a copy." : "Connecting to your saved songs…";
 }
+function renderSelBar() {
+  $("selBar").hidden = !selecting; $("libSelect").textContent = selecting ? "Done" : "Select";
+  const allOn = shownIds.length && shownIds.every(id => picked.has(id));
+  $("selAll").textContent = allOn ? "Clear selection" : "Select all shown (" + shownIds.length + ")";
+  const del = $("selDel"); del.disabled = !picked.size; del.classList.remove("confirm");
+  del.textContent = picked.size ? "Delete " + picked.size + " song" + (picked.size === 1 ? "" : "s") : "Delete";
+}
+async function deletePicked() {
+  const del = $("selDel");
+  if (!del.classList.contains("confirm")) { del.classList.add("confirm"); del.textContent = "Tap again to delete " + picked.size; setTimeout(() => { if (del.classList.contains("confirm")) renderSelBar(); }, 4000); return; }
+  const ids = [...picked]; del.disabled = true; del.textContent = "Deleting…";
+  let failed = 0;
+  for (const id of ids) {
+    try { if (db) await db.doc("songs/" + id).delete(); else { const all = lsAll(); delete all[id]; store("ccb.songs", JSON.stringify(all)); } songs.delete(id); picked.delete(id); }
+    catch (err) { failed++; }
+  }
+  selecting = false; renderSongList();
+  toast(failed ? "Deleted " + (ids.length - failed) + " songs. " + failed + " couldn’t be deleted; try again." : "Deleted " + ids.length + " song" + (ids.length === 1 ? "" : "s") + ".");
+  if (!songs.has(song.id)) { const next = [...songs.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]; loadSong(next ? clone(next) : exampleSong(), false); }
+}
 function onSongListClick(e) {
+  if (selecting) {
+    const row = e.target.closest(".songrow"); if (!row) return;
+    const box = row.querySelector("[data-pick]"); const id = box.dataset.pick;
+    if (e.target !== box) box.checked = !box.checked;
+    if (box.checked) picked.add(id); else picked.delete(id);
+    renderSelBar(); return;
+  }
   const o = e.target.closest("[data-open]"); const d = e.target.closest("[data-del]");
   if (o) { const s = songs.get(o.dataset.open); if (s) { loadSong(clone(s), false); closeModals(); } }
   if (d) {
@@ -1759,7 +1830,7 @@ function saveCats() {
     catch (e) { toast("Couldn’t save your categories. Try again in a moment."); }
   });
 }
-function openDrawer() { renderSongList(); $("scrim").hidden = false; $("drawer").hidden = false; $("songSearch").focus(); }
+function openDrawer() { selecting = false; picked.clear(); renderSongList(); $("scrim").hidden = false; $("drawer").hidden = false; $("songSearch").focus(); }
 
 /* ---------- Device storage for the installed app (outside Claude).
    IndexedDB with the same small API the page uses for the account db, so the rest of the app doesn't care
@@ -1785,8 +1856,12 @@ function makeDeviceDb() {
   };
   const fireCol = async (name) => {
     const ls = colL.get(name); if (!ls || !ls.size) return;
-    const all = await tx("readonly", st => st.getAll(IDBKeyRange.bound(name + "/", name + "/\uffff")));
-    const keys = await tx("readonly", st => st.getAllKeys(IDBKeyRange.bound(name + "/", name + "/\uffff")));
+    // Values and keys come from one transaction so a write in between can't make them disagree.
+    const range = IDBKeyRange.bound(name + "/", name + "/\uffff");
+    const [all, keys] = await opened.then(idb => new Promise((res, rej) => {
+      const t = idb.transaction("docs", "readonly"); const st = t.objectStore("docs"); const a = st.getAll(range), k = st.getAllKeys(range);
+      t.oncomplete = () => res([a.result, k.result]); t.onerror = t.onabort = () => rej(t.error);
+    }));
     const docs = all.map((v, i) => ({ id: keys[i].slice(name.length + 1), data: () => clone(v), _v: v }));
     ls.forEach(l => l({ docs: l.sort ? docs.slice().sort(l.sort).slice(0, l.lim) : docs, metadata: { fromCache: false } }));
   };
@@ -2509,9 +2584,9 @@ function pdfColumnLines(items) {
   out.forEach((o, i) => { if (i && med && gaps[i - 1] > med * 1.45) lines.push(""); lines.push(o.s); });
   return lines;
 }
-async function fileToSong(file) {
+async function fileToSong(file, batch) {
   const name = file.name; const ext = (name.split(".").pop() || "").toLowerCase();
-  let text, opts = { fromFile: true };
+  let text, opts = { fromFile: true, fileTitle: fileTitleOf(name), batch: !!batch };
   if (ext === "docx") text = await docxToText(await file.arrayBuffer());
   else if (ext === "pdf") { text = await pdfToText(await file.arrayBuffer()); opts.spaced = true; }
   else if (ext === "doc") throw new Error("Old .doc files can’t be read. Open it in Word and save as .docx.");
@@ -2545,7 +2620,7 @@ async function importFiles(files) {
     const row = document.createElement("div"); row.className = "imp-row";
     row.innerHTML = '<div class="nm"><b></b><span>Reading…</span></div>'; row.querySelector("b").textContent = f.name; list.appendChild(row);
     try {
-      const s = await fileToSong(f); if (cat) s.categories = [cat];
+      const s = await fileToSong(f, files.length > 1); if (cat) s.categories = [cat];
       await persistSong(s); made.push(s);
       const dup = [...songs.values()].some(x => x.id !== s.id && (x.title || "").toLowerCase() === s.title.toLowerCase());
       const nChords = s.sections.reduce((a, x) => a + x.lines.reduce((b, l) => b + l.chords.length, 0), 0);
