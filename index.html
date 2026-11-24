@@ -401,6 +401,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .keys { border-collapse: collapse; width: calc(100% - 28px); }
 .keys td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
 .keys td:first-child { font-weight: 700; white-space: nowrap; padding-right: 14px; }
+.ccli-row { display: flex; gap: 8px; align-items: flex-end; }
 .modal.narrow{width:min(420px, calc(100vw - 24px))}
 .note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
@@ -768,6 +769,11 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <button class="btn primary" id="impChoose">Choose files</button>
   </div>
   <label class="field">Add imported songs to<select id="impCat"></select></label>
+  <form class="ccli-row" id="ccliForm">
+    <label class="field grow">Get a song from SongSelect by CCLI #<input id="ccliIn" inputmode="numeric" placeholder="e.g. 6428767" autocomplete="off"></label>
+    <button class="btn" type="submit">Open SongSelect</button>
+  </form>
+  <div class="note" style="margin-top:-6px">Opens the song in SongSelect. Choose your key, click Download, then ChordPro (or PDF), and drop the file here.</div>
   <div class="imp-list" id="impList"></div>
   <div class="acts"><button class="btn" id="impClose">Done</button></div>
 </div>
@@ -2606,6 +2612,11 @@ async function restoreBackupFile(f, list) {
 function bindImport() {
   $("btnBackup").onclick = backupLibrary;
   $("impChoose").onclick = () => $("fileIn").click();
+  $("ccliForm").onsubmit = (e) => {
+    e.preventDefault(); const n = ($("ccliIn").value.match(/\d{3,9}/) || [])[0];
+    if (!n) { toast("Type the CCLI song number (digits only)."); return; }
+    window.open("https://songselect.ccli.com/search/results?search=" + n, "_blank", "noopener");
+  };
   $("impClose").onclick = closeModals;
   const dz = $("dropZone");
   ["dragenter", "dragover"].forEach(t => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add("over"); }));
