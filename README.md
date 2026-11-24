@@ -11,3 +11,7 @@ An installable web app for building chord charts: paste or import lyrics, place 
 - `sw.js`: offline support. `manifest.webmanifest` + `icons/`: install details.
 - `fonts/`: fonts embedded in exported PDFs (SIL Open Font License).
 - `vendor/`: jsPDF, JSZip and pdf.js, shipped with the app so import and export work offline.
+- Sync between devices: put the Firebase web config in `firebase-config.js` (`window.CCB_FIREBASE = {...}`), then use **Songs > Sign in to sync**. Database rules are in `tools/firestore.rules`.
+
+## Updating
+`tools/source.html` is the app source (the same file runs as a Claude artifact). `tools/build.sh tools/source.html <outdir>` rebuilds `index.html` and `sw.js`; it expects `fonts/` and `vendor/` next to the source.
