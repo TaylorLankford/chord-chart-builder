@@ -372,6 +372,20 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .recvrow .n { color: var(--muted); width: 20px; }
 .recvrow .k { margin-left: auto; color: var(--muted); font-size: 13px; }
 [hidden] { display: none !important; }
+.drawer.help { width: min(560px, 96vw); }
+.helplist { overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px; }
+.helplist details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.helplist summary { cursor: pointer; padding: 12px 14px; font-weight: 700; font-size: 15.5px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.helplist summary::-webkit-details-marker { display: none; }
+.helplist summary::before { content: "▸"; color: var(--muted); transition: transform .15s; display: inline-block; }
+.helplist details[open] summary::before { transform: rotate(90deg); }
+.helplist details > :not(summary) { margin: 0 14px 12px; font-size: 14.5px; line-height: 1.5; }
+.helplist ul { padding-left: 18px; }
+.helplist li { margin: 4px 0; }
+.helplist mark { background: #FFE58A; color: inherit; border-radius: 2px; }
+.keys { border-collapse: collapse; width: calc(100% - 28px); }
+.keys td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+.keys td:first-child { font-weight: 700; white-space: nowrap; padding-right: 14px; }
 .modal.narrow{width:min(420px, calc(100vw - 24px))}
 .note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
@@ -382,6 +396,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <div class="bar pad">
       <button class="btn" id="btnSongs" aria-haspopup="dialog">Songs</button>
       <button class="btn" id="btnSets" aria-haspopup="dialog">Setlists</button>
+      <button class="btn" id="btnHelp" aria-haspopup="dialog" title="How to use the app">Help</button>
       <span class="brand">Chord Chart Builder</span>
       <span class="status" id="status" role="status"></span>
       <span class="spacer"></span>
@@ -469,6 +484,116 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <button class="btn" id="popRight" title="Move one letter right">Nudge &rarr;</button>
     <span class="spacer"></span>
     <button class="btn" id="popDel">Remove</button>
+  </div>
+</div>
+
+<div class="drawer right help" id="helpDrawer" hidden role="dialog" aria-label="Help">
+  <div style="display:flex;align-items:center;gap:8px"><h2>Help</h2><span class="spacer"></span><button class="btn" id="helpClose">Close</button></div>
+  <input type="search" id="helpSearch" placeholder="Search help, e.g. transpose, pedal, PDF">
+  <div class="helplist" id="helpList">
+    <details open><summary>Getting started</summary>
+      <p><b>New song</b> (top right): type a title, paste the lyrics, and click <b>Build song</b>. Labels like “Verse 1” or “Chorus” become sections. If you paste a chart with chords above the lyrics, or ChordPro text, the chords come in too.</p>
+      <p><b>Import</b>: bring in files you already have. Choose files or drag them onto the window. You can pick a category for them first.</p>
+      <p>Everything saves automatically. Open other songs from <b>Songs</b>.</p>
+    </details>
+    <details><summary>Placing chords</summary>
+      <p>Make sure <b>Chords</b> mode is on (top left). Then:</p>
+      <ul>
+        <li><b>Click a letter</b> to put a chord right over it, or <b>click a space</b> to put it between words.</li>
+        <li>Type the chord (G, Em7, D/F#) or tap one of the suggestions for the key, then press <b>Enter</b>.</li>
+        <li><b>Drag a chord</b> to move it. Click a chord to change it, <b>Nudge</b> it one letter, or <b>Remove</b> it.</li>
+      </ul>
+      <p>If a chord is wider than the syllable under it, the word is marked as crowded. Split the word there (next topic) and the chart adds a hyphen and room.</p>
+    </details>
+    <details><summary>Splitting words into syllables</summary>
+      <p>Hyphens are only added where you choose.</p>
+      <ul>
+        <li>In Chords mode, <b>Ctrl+click</b> a letter to split the word just before it. The chord window also has <b>Split word here</b>.</li>
+        <li>Or switch to <b>Syllables</b> mode (<b>Ctrl+Space</b> toggles): click a letter to split, click a hyphen to join the word back.</li>
+      </ul>
+    </details>
+    <details><summary>Sections and song order</summary>
+      <ul>
+        <li>Each section has a color badge and a type (Verse, Chorus, Bridge…). Click the name to rename it.</li>
+        <li>Drag a section by its <b>⠿ handle</b> to move it. <b>Edit words</b> changes the lyrics; <b>Duplicate</b> and <b>Delete</b> do what they say.</li>
+        <li><b>Song order</b> (the badge strip) is the order the song is played, like V1 C V2 C. Drag badges to reorder, <b>×</b> to remove, <b>+ Add</b> to repeat a section. Repeats print as a label (CHORUS) unless you change that in the PDF settings.</li>
+      </ul>
+    </details>
+    <details><summary>Key, transposing and numerals</summary>
+      <ul>
+        <li>Use <b>−</b> and <b>+</b> next to Key to move every chord a half step, or pick a key from the list.</li>
+        <li><b>Numerals</b> shows Roman numerals (I, IV, vi) based on the key. <b>Letters</b> switches back. This is only how chords are shown; nothing is lost.</li>
+        <li>In a setlist or in Perform you can change the key for that performance only, without changing the saved song.</li>
+      </ul>
+    </details>
+    <details><summary>Library and categories</summary>
+      <ul>
+        <li><b>Songs</b> opens your library: search by title, artist or lyrics, jump by letter, or filter by category.</li>
+        <li>Put a song in categories with the chips under its title. <b>Edit categories</b> adds, renames or removes them.</li>
+        <li><b>Back up library</b> (bottom of Songs) saves everything in one file. Import that file to restore it.</li>
+      </ul>
+    </details>
+    <details><summary>Importing tips</summary>
+      <ul>
+        <li>Works with PDFs, Word (.docx), SongSelect and OnSong text, ChordPro and plain text.</li>
+        <li>Scanned PDFs (pictures of paper) and old .doc files can’t be read. Save a .doc as .docx in Word first.</li>
+        <li>After an import, check the chords. If a chart comes in wrong, send it to Claude so the importer learns that pattern. Then delete the song and import it again.</li>
+      </ul>
+    </details>
+    <details><summary>Export PDF</summary>
+      <ul>
+        <li><b>Export PDF</b> shows a live preview. Change font, sizes, spacing, columns, margins and what to show.</li>
+        <li>Save your settings as a <b>look</b> (Standard, Two columns, Large print, Lyrics only, or your own) and reuse it on any song.</li>
+        <li><b>Download PDF</b> saves the file, ready to upload to the Planning Center song library.</li>
+      </ul>
+    </details>
+    <details><summary>Share menu</summary>
+      <ul>
+        <li><b>Copy ChordPro</b>: paste the song into a Planning Center chord chart, OnSong or an email.</li>
+        <li><b>Save ChordPro file</b>: a .txt copy any chord app can open.</li>
+        <li><b>Send this song</b>: a link anyone can open to add a copy to their library (you need to be signed in).</li>
+        <li><b>Share this app</b>: send someone the app itself.</li>
+      </ul>
+    </details>
+    <details><summary>Setlists</summary>
+      <ul>
+        <li><b>Setlists</b> → <b>New setlist</b>. Search to add songs, set each song’s key, and drag songs (or use the arrows) to reorder.</li>
+        <li><b>Perform</b> plays the whole set; ▶ starts from that song. <b>Send</b> shares the setlist with your band as a link.</li>
+      </ul>
+    </details>
+    <details><summary>Perform mode and page-turn pedal</summary>
+      <ul>
+        <li><b>Perform</b> shows the song full screen. Each pedal press, tap on the right side or swipe turns one screen; at the end it moves to the next song.</li>
+        <li>The top bar has <b>Exit</b>, <b>Back</b>, <b>Next</b>, <b>Set list</b> (jump to any song) and <b>Display</b> (text size, key, dark theme, pages or scroll, columns, chords).</li>
+        <li><b>Pedal check</b> (in Display) shows which key your pedal sends. Forward: Right, Down, Page Down, Space. Back: Left, Up, Page Up. If yours isn’t recognized, try the pedal’s mode button.</li>
+      </ul>
+    </details>
+    <details><summary>Accounts and sync</summary>
+      <ul>
+        <li>Without an account, songs save on this device only.</li>
+        <li><b>Songs</b> → <b>Sign in or create account</b> to sync between your PC and iPad. Songs already on the device join your synced library. Forgot your password? Use <b>Forgot password?</b> in the same window.</li>
+        <li>Everything works offline and catches up when you’re back online.</li>
+      </ul>
+    </details>
+    <details><summary>Installing and updates</summary>
+      <ul>
+        <li><b>PC</b> (Edge or Chrome): the install icon at the right of the address bar.</li>
+        <li><b>iPad</b> (Safari): Share → <b>Add to Home Screen</b>.</li>
+        <li>Updates arrive the next time you open the app. If you see “A new version is ready,” close and reopen it.</li>
+      </ul>
+    </details>
+    <details><summary>Keyboard shortcuts</summary>
+      <table class="keys">
+        <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
+        <tr><td>Ctrl+click a letter</td><td>Split the word there</td></tr>
+        <tr><td>Ctrl+Space</td><td>Switch Chords / Syllables mode</td></tr>
+        <tr><td>Enter</td><td>Place the chord you typed</td></tr>
+        <tr><td>Esc</td><td>Close a window, or exit Perform</td></tr>
+        <tr><td>→ ↓ Space / ← ↑</td><td>In Perform: forward / back</td></tr>
+        <tr><td>+ / −</td><td>In Perform: bigger / smaller text</td></tr>
+      </table>
+    </details>
+    <div class="note" id="helpNone" hidden>Nothing matches. Try another word, or ask Claude.</div>
   </div>
 </div>
 
@@ -1496,7 +1621,7 @@ function toast(msg, actLabel, fn) {
 }
 function hideToast() { $("toast").hidden = true; toastFn = null; }
 function openModal(id) { $("scrim").hidden = false; $(id).hidden = false; }
-function closeModals() { ["newModal", "cpModal", "drawer", "impModal", "signModal", "setDrawer", "sendModal", "recvModal"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
+function closeModals() { ["newModal", "cpModal", "drawer", "impModal", "signModal", "setDrawer", "sendModal", "recvModal", "helpDrawer"].forEach(id => $(id).hidden = true); $("scrim").hidden = true; }
 
 /* ---------- ChordPro out ---------- */
 function showChordPro(note) {
@@ -2845,6 +2970,21 @@ async function addReceived() {
   } catch (e) { $("recvErr").textContent = "Couldn’t add it. Try again in a moment."; $("recvErr").hidden = false; }
   finally { $("recvAdd").disabled = false; }
 }
+function openHelp() { closeModals(); $("scrim").hidden = false; $("helpDrawer").hidden = false; $("helpSearch").focus(); }
+function filterHelp() {
+  const q = $("helpSearch").value.trim().toLowerCase(); let shown = 0;
+  document.querySelectorAll("#helpList details").forEach(d => {
+    const hit = !d.dataset.off && (!q || d.textContent.toLowerCase().includes(q));
+    d.hidden = !hit; if (hit) shown++;
+    if (q && hit) d.open = true;
+  });
+  $("helpNone").hidden = shown > 0;
+}
+function bindHelp() {
+  $("btnHelp").onclick = openHelp; $("helpClose").onclick = closeModals;
+  $("helpSearch").addEventListener("input", filterHelp);
+  if (!FB.cfg) document.querySelectorAll("#helpList details").forEach(d => { if (/Accounts and sync|Installing and updates/.test(d.querySelector("summary").textContent)) { d.hidden = true; d.dataset.off = "1"; } });
+}
 function bindSending() {
   document.querySelectorAll("#sendModal [data-close], #recvModal [data-close]").forEach(b => b.onclick = closeModals);
   $("sendMake").onclick = makeSendLink;
@@ -2866,7 +3006,7 @@ function bindSending() {
 }
 
 /* ---------- Boot ---------- */
-bindEditor(); bindChrome(); bindExport(); bindImport(); bindSignIn(); bindSetlists(); bindPerformance(); bindSending();
+bindEditor(); bindChrome(); bindExport(); bindImport(); bindSignIn(); bindSetlists(); bindPerformance(); bindSending(); bindHelp();
 song = exampleSong(); renderAll();
 if (store("ccb.preview") !== "0" && window.innerWidth >= 1100) setPreview(true);
 setStatus("");
