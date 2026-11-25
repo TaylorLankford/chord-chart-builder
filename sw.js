@@ -1,6 +1,6 @@
 // Offline support. The app shell is cached on install; index.html is fetched fresh when online
 // (so updates arrive), and everything else is served from the cache first.
-const VERSION = "00434cbd42";
+const VERSION = "3f90e1180b";
 const CACHE = "ccb-" + VERSION;
 const SHELL = [
   "./", "index.html", "manifest.webmanifest",

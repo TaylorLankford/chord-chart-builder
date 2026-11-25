@@ -1047,6 +1047,8 @@ function parseSongText(input, opts) {
   const flush = () => { if (cur && (cur.lines.length || cur.label)) blocks.push(cur); cur = null; };
   const ensure = () => { if (!cur) cur = { label: null, type: null, lines: [] }; return cur; };
 
+  // A medley's title names each song: "Christology // Doxology".
+  const titleParts = [meta.title, splitChartName(opts.fileTitle || "").title].flatMap(t => { const ps = (t || "").split(/\s+(?:\/\/?|\|\|)\s+/); return ps.length > 1 ? ps : []; }).map(x => x.trim().toLowerCase()).filter(x => x.length >= 3);
   for (let i = 0; i < raw.length; i++) {
     const line = raw[i];
     const trimmed = line.trim();
@@ -1084,6 +1086,8 @@ function parseSongText(input, opts) {
     if (HYMNAL_RE.test(trimmed) && !inEnv) { meta.hymnal = meta.hymnal || trimmed; continue; }
     const lm = LABEL_RE.exec(trimmed);
     if (lm && !inEnv) { flush(); cur = { label: labelFrom(lm), type: null, lines: [] }; continue; }
+    // A medley ("Christology // Doxology") marks where the second song starts with its name on a line of its own.
+    if (opts.fromFile && !inEnv && titleParts.includes(trimmed.toLowerCase()) && cur && cur.lines.length) { flush(); cur = { label: trimmed.replace(/^\w/, c => c.toUpperCase()), type: null, lines: [] }; continue; }
     if (isCP) {
       ensure().lines.push(collapseHyphens(parseBracketLine(line.replace(/\s+$/, "")), !!opts.spaced));
     } else if (colFormat && isChordLine(line)) {
