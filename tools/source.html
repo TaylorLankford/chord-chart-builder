@@ -888,11 +888,41 @@ function simplifyChord(name) {
   else if (/sus|^\(?4\)?$/i.test(q)) out += "sus";
   return out + bass;
 }
+// The key a section starts in before its own key change: the last key change ahead of it in the song order, else the song key.
+function keyBefore(sg, sec) {
+  let k = sg.key || guessKey(sg) || "";
+  for (const id of sg.arrangement || []) { if (id === sec.id) return k; const x = (sg.sections || []).find(s => s.id === id); if (x && x.keyChange) k = x.keyChange; }
+  return k;
+}
+// How well a section's chords fit a key: share of chord roots that belong to the key's scale, plus a bonus when it starts or ends on the home chord.
+function keyFit(sec, key) {
+  const p = parseKey(key); if (!p) return 0;
+  const scale = (p.minor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11]).map(d => (p.idx + d) % 12);
+  const roots = []; sec.lines.forEach(l => l.chords.slice().sort((a, b) => a.pos - b.pos).forEach(c => { const m = /^\(?([A-G][#b]?)/.exec(c.name); if (m && NOTE[m[1]] !== undefined) roots.push(NOTE[m[1]]); }));
+  if (!roots.length) return 0;
+  let f = roots.filter(r => scale.includes(r)).length / roots.length;
+  if (roots[0] === p.idx) f += 0.15; if (roots[roots.length - 1] === p.idx) f += 0.15;
+  return f;
+}
+// Set (or clear) a section's key change. Its chords move from the key they're in now to the new key,
+// unless they're already written in the new key (an imported chart), in which case only the marker is added.
+function setKeyChange(sec, nk) {
+  const from = sec.keyChange || keyBefore(song, sec), to = nk || keyBefore(song, sec);
+  const a = parseKey(from), b = parseKey(to);
+  let moved = false;
+  if (a && b && a.idx !== b.idx && sec.lines.some(l => l.chords.length) && !(nk && !sec.keyChange && keyFit(sec, to) > keyFit(sec, from))) {
+    let semis = (b.idx - a.idx + 12) % 12; if (semis > 6) semis -= 12;
+    const flats = keyUsesFlats(to);
+    sec.lines.forEach(l => l.chords.forEach(c => c.name = tChord(c.name, semis, flats))); moved = true;
+  }
+  if (nk) sec.keyChange = nk; else delete sec.keyChange;
+  return { moved, from, to };
+}
 function keyChangeOptions(sel, blank) {
   let o = '<option value="">' + blank + '</option><optgroup label="Major">';
-  for (let i = 0; i < 12; i++) { const k = keyName(i, false); o += "<option" + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
+  for (let i = 0; i < 12; i++) { const k = keyName(i, false); o += '<option value="' + k + '"' + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
   o += '</optgroup><optgroup label="Minor">';
-  for (let i = 0; i < 12; i++) { const k = keyName(i, true); o += "<option" + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
+  for (let i = 0; i < 12; i++) { const k = keyName(i, true); o += '<option value="' + k + '"' + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
   return o + "</optgroup>";
 }
 // Every key the song is in, in song order: "G to A"
@@ -961,6 +991,7 @@ function keyChangeOf(t) {
 function liftSectionNotes(sg) {
   let changed = false;
   (sg.sections || []).forEach(x => {
+    if (x.keyChange && /^key change to /i.test(x.keyChange)) { x.keyChange = x.keyChange.replace(/^key change to /i, ""); changed = true; }
     if (x.note || x.keyChange) return;
     const m = LABEL_RE.exec(x.label || ""); const n = m && noteFrom(m); if (!n) return;
     const kc = keyChangeOf(n);
@@ -1647,7 +1678,11 @@ function bindEditor() {
     const lab = e.target.closest("[data-label]"); const typ = e.target.closest("[data-type]");
     const nt = e.target.closest("[data-note]"); const kc = e.target.closest("[data-kc]");
     if (nt) { const s = secById(nt.dataset.note); const v = nt.value.trim(); if (v !== (s.note || "")) commit(() => { if (v) s.note = v; else delete s.note; }); }
-    if (kc) { const s = secById(kc.dataset.kc); const v = kc.value; commit(() => { if (v) s.keyChange = v; else delete s.keyChange; }); }
+    if (kc) {
+      const s = secById(kc.dataset.kc); const v = kc.value; let r;
+      commit(() => { r = setKeyChange(s, v); });
+      toast(r.moved ? s.label + " moved from " + r.from + " to " + r.to + "." : v ? s.label + " is marked as a key change to " + v + " (its chords were already in " + v + ")." : "Key change removed.");
+    }
     if (lab) { const v = lab.value.trim(); const s = secById(lab.dataset.label); if (v && v !== s.label) commit(() => { s.label = v; }); else lab.value = s.label; }
     if (typ) {
       const s = secById(typ.dataset.type); const nt = typ.value;
