@@ -125,6 +125,13 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .mini { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 9px; color: var(--muted); font-weight: 600; font-size: 13.5px; min-height: 32px; }
 .mini:hover { background: var(--hover); color: var(--ink); }
 .block-body { padding: 10px 14px 14px; overflow-x: auto; }
+.block-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px 0 14px; }
+.note-in { flex: 1 1 200px; min-width: 0; font-style: italic; font-size: 13.5px; color: var(--muted); border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 4px 6px; }
+.note-in:hover, .note-in:focus { border-color: var(--line); background: var(--bg); color: var(--ink); outline: none; }
+.kc-in { font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 3px 4px; }
+.kc-in.on { border-color: var(--ink); font-weight: 700; }
+.sheet .psec .pnote { font-style: italic; color: var(--muted); font-size: 13px; margin: -2px 0 4px; }
+.sheet .kcbox { display: inline-block; border: 1.5px solid currentColor; border-radius: 4px; padding: 1px 8px; font-weight: 700; font-size: 12px; letter-spacing: .06em; margin: 0 0 8px; }
 .repeat-note { font-size: 12.5px; color: var(--muted); padding: 0 14px 10px; }
 
 .words { width: 100%; min-height: 140px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: var(--font-chart); font-size: 17px; line-height: 1.5; background: var(--bg); resize: vertical; }
@@ -552,6 +559,10 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
         <li>Each section has a color badge and a type (Verse, Chorus, Bridge…). Click the name to rename it.</li>
         <li>Drag a section by its <b>⠿ handle</b> to move it. <b>Edit words</b> changes the lyrics; <b>Duplicate</b> and <b>Delete</b> do what they say.</li>
         <li><b>Song order</b> (the badge strip) is the order the song is played, like V1 C V2 C. Drag badges to reorder, <b>×</b> to remove, <b>+ Add</b> to repeat a section. Repeats print as a label (CHORUS) unless you change that in the PDF settings.</li>
+        <li><b>Instruction:</b> type under a section's name (e.g. <i>arpeggiated</i>, <i>band out</i>). It prints on its own line under the label.</li>
+        <li><b>Key change:</b> pick a key in the section's <b>Key change</b> menu. A boxed KEY CHANGE marker prints before that section, the header shows every key (Key: C to D to E), and numerals follow the new key. Make the post-key-change chorus its own section (Duplicate, then transpose its chords).</li>
+        <li><b>Bars and repeats:</b> in Edit words, type a row like <b>||:&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;:||&nbsp;x2</b> with spaces between the bars, then click chords into the spaces. Bars and repeat signs show in gray, chords in bold. Dots (<b>.</b>) mark beats.</li>
+        <li><b>Simplify</b> (top bar) shows plain chords for this song: D2(no3) becomes D, Em7 becomes Em. Slash, sus, dim and aug chords stay. Your real chords are kept.</li>
       </ul>
     </details>
     <details><summary>Key, transposing and numerals</summary>
@@ -874,6 +885,19 @@ function simplifyChord(name) {
   else if (/sus|^\(?4\)?$/i.test(q)) out += "sus";
   return out + bass;
 }
+function keyChangeOptions(sel, blank) {
+  let o = '<option value="">' + blank + '</option><optgroup label="Major">';
+  for (let i = 0; i < 12; i++) { const k = keyName(i, false); o += "<option" + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
+  o += '</optgroup><optgroup label="Minor">';
+  for (let i = 0; i < 12; i++) { const k = keyName(i, true); o += "<option" + (k === sel ? " selected" : "") + ">Key change to " + k + "</option>"; }
+  return o + "</optgroup>";
+}
+// Every key the song is in, in song order: "G to A"
+function keyPath(sg) {
+  const ks = sg.key ? [sg.key] : [];
+  (sg.arrangement || []).forEach(id => { const x = (sg.sections || []).find(s => s.id === id); if (x && x.keyChange && x.keyChange !== ks[ks.length - 1]) ks.push(x.keyChange); });
+  return ks.join(" to ");
+}
 function shownChord(name, sg) { return sg && sg.simplify ? simplifyChord(name) : name; }
 function toRoman(name, key) {
   const p = parseKey(key); if (!p) return name;
@@ -923,9 +947,27 @@ function typeFromLabel(label) {
 }
 const LABEL_WORD = "(?:pre[\\s-]?chorus|chorus|refrain|verse|bridge|tag|intro|outro|coda|ending|interlude|turnaround|instrumental|solo|vamp|misc\\.?)(?:\\s*\\d+[a-h]?(?:\\s*\\/\\s*\\d+[a-h]?)*|[a-h](?=\\s*:?\\s*$))?";
 const LABEL_MOD = "(?:(?:breakdown|final|last|first|half|double|soft|quiet|big|acoustic|a\\s?cappella|reprise|modulated|key\\s+change|extended|short|full|band|drum|piano)\\s+)?";
-const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*(?:x\\s*\\d+|\\d+\\s*x)\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,80}?)\\s*\\))?\\s*:?\\s*$", "i");
+const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*(?:x\\s*\\d+|\\d+\\s*x)\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,80}?)\\s*\\))?(?:\\s+[-–—]\\s+([A-Za-z][^()]{0,40}?))?\\s*:?\\s*$", "i");
 // "Outro (over Chorus)" keeps its note; the note doesn't decide the section type.
-function labelFrom(m) { return normLabel(m[1]) + (m[2] && !/^x\s*\d+$/i.test(m[2]) ? " (" + m[2].trim() + ")" : ""); }
+// "Key change to A", "(Modulate to Bb)", "Key Change! D Major" -> "A", "Bb", "D"
+function keyChangeOf(t) {
+  const m = /^[(\[]?\s*(?:key\s*change|modulat(?:e|ion)|new\s+key)\b[\s!:\-–→]*(?:(?:up\s+)?to\s+)?([A-G][#b]?)(m(?!aj)|\s+minor)?(?:\s+major)?\s*[)\]]?\s*$/i.exec((t || "").trim());
+  return m ? m[1] + (m[2] ? "m" : "") : null;
+}
+// Older imports kept "Chorus (Key Change! D Major)" or "Intro (vamp until verse)" in the name. Split it out.
+function liftSectionNotes(sg) {
+  let changed = false;
+  (sg.sections || []).forEach(x => {
+    if (x.note || x.keyChange) return;
+    const m = LABEL_RE.exec(x.label || ""); const n = m && noteFrom(m); if (!n) return;
+    const kc = keyChangeOf(n);
+    x.label = labelFrom(m); if (kc) x.keyChange = kc; else x.note = n; changed = true;
+  });
+  return changed;
+}
+function labelFrom(m) { return normLabel(m[1]); }
+// "Intro (arpeggiated)" or "Intro - Arpeggiated": the part after the name is an instruction for the section.
+function noteFrom(m) { const n = (m[2] && !/^x\s*\d+$/i.test(m[2]) ? m[2] : m[3] || "").trim(); return n; }
 function normLabel(raw) {
   const r0 = raw.trim().replace(/^(pre[\s-]?chorus|chorus|verse|bridge|tag|intro|outro|refrain|interlude|ending)([a-h])$/i, "$1 $2"); const base = r0 === r0.toUpperCase() ? r0.toLowerCase() : r0;
   return base.replace(/\s+/g, " ").replace(/(\D)(\d)/, "$1 $2").replace(/\s+/g, " ")
@@ -1104,7 +1146,7 @@ function parseSongText(input, opts) {
         const k = d[1].toLowerCase(), v = (d[2] || "").trim();
         if (k === "title" || k === "t") meta.title = v;
         else if (["artist", "subtitle", "st", "composer", "lyricist"].includes(k)) { if (!meta.artist) meta.artist = v; }
-        else if (k === "key") meta.key = v;
+        else if (k === "key" && !(blocks.length || (cur && cur.lines.length))) meta.key = v;
         else if (k === "tempo") meta.tempo = v;
         else if (k === "time") meta.time = v;
         else if (k === "copyright") meta.copyright = v;
@@ -1116,7 +1158,9 @@ function parseSongText(input, opts) {
         }
         else if (/^(end_of_|eo[cvbt]$)/.test(k)) { flush(); inEnv = false; }
         else if (k === "chorus") { flush(); blocks.push({ label: v || "Chorus", type: "chorus", lines: [], ref: true }); }
-        else if (["comment", "c", "ci", "comment_italic", "highlight", "cb"].includes(k) && LABEL_RE.test(v)) { flush(); cur = { label: labelFrom(LABEL_RE.exec(v)), type: null, lines: [] }; }
+        else if (["comment", "c", "ci", "comment_italic", "highlight", "cb"].includes(k) && cur && cur.label && !cur.lines.length && !cur.note && v && !LABEL_RE.test(v)) cur.note = v;
+        else if (k === "key" && (blocks.length || (cur && cur.lines.length))) { flush(); blocks.push({ keyMark: v, lines: [] }); }
+        else if (["comment", "c", "ci", "comment_italic", "highlight", "cb"].includes(k) && LABEL_RE.test(v)) { flush(); const m = LABEL_RE.exec(v); cur = { label: labelFrom(m), note: noteFrom(m), type: null, lines: [] }; }
         continue;
       }
       if (/^\s*#/.test(line)) continue;
@@ -1127,8 +1171,11 @@ function parseSongText(input, opts) {
     if (opts.fromFile && (/^\d{1,2}$/.test(trimmed) || (meta.title && trimmed.toLowerCase() === meta.title.toLowerCase() + " -"))) continue;
     if (meta.title) { const hm = /^(.+?)\s*[-–]\s*\d+$/.exec(trimmed); if (hm && hm[1].toLowerCase().startsWith(meta.title.toLowerCase())) continue; }
     if (HYMNAL_RE.test(trimmed) && !inEnv) { meta.hymnal = meta.hymnal || trimmed; continue; }
+    // "Key change to A", "(Modulate to Bb)", "New key: D" between sections.
+    const km = !inEnv && keyChangeOf(trimmed);
+    if (km) { flush(); blocks.push({ keyMark: km, lines: [] }); continue; }
     const lm = LABEL_RE.exec(trimmed);
-    if (lm && !inEnv) { flush(); cur = { label: labelFrom(lm), type: null, lines: [] }; continue; }
+    if (lm && !inEnv) { flush(); cur = { label: labelFrom(lm), note: noteFrom(lm), type: null, lines: [] }; continue; }
     // A medley ("Christology // Doxology") marks where the second song starts with its name on a line of its own.
     if (opts.fromFile && !inEnv && titleParts.includes(trimmed.toLowerCase()) && cur && cur.lines.length) { flush(); cur = { label: trimmed.replace(/^\w/, c => c.toUpperCase()), type: null, lines: [] }; continue; }
     if (isCP) {
@@ -1138,6 +1185,8 @@ function parseSongText(input, opts) {
       const next = raw[i + 1];
       let text = "";
       if (next !== undefined && next.trim() && !isChordLine(next) && !LABEL_RE.test(next.trim())) { text = next.replace(/\s+$/, ""); i++; }
+      // A chords-only bar row ("||: G | C :|| x2") keeps its bar marks as the line's text.
+      else if (/(^|\s)(\|+:?|:?\|+)(?=\s|$)/.test(line)) { text = line.replace(/\s+$/, "").replace(/\S+/g, w => chordParts(w) ? " ".repeat(w.length) : w); }
       const need = toks.length ? toks[toks.length - 1].pos : 0;
       if (text.length < need) text = text + " ".repeat(need - text.length);
       ensure().lines.push(collapseHyphens({ text, chords: toks, breaks: [] }, true));
@@ -1197,8 +1246,9 @@ function buildSong(blocks, meta) {
   const keyOf = (b) => JSON.stringify(b.lines);
   const counts = {};
   blocks.forEach(b => { if (!b.label && b.lines.length) counts[keyOf(b)] = (counts[keyOf(b)] || 0) + 1; });
-  const byKey = new Map();
+  const byKey = new Map(); let pendingKey = null;
   for (const b of blocks) {
+    if (b.keyMark) { pendingKey = b.keyMark; continue; }
     const k = keyOf(b);
     if (!b.lines.length) {
       const lab = (b.label || "").toLowerCase(); const t = b.type || typeFromLabel(b.label);
@@ -1211,7 +1261,7 @@ function buildSong(blocks, meta) {
     let label = b.label;
     if (!type) type = counts[k] >= 2 ? "chorus" : "verse";
     if (!label) label = autoLabel(type, song);
-    const sec = { id: "x" + uid(), type, label, lines: b.lines.length ? b.lines : [] };
+    const sec = { id: "x" + uid(), type, label, lines: b.lines.length ? b.lines : [] }; if (b.note) sec.note = b.note; if (pendingKey) { sec.keyChange = pendingKey; pendingKey = null; }
     song.sections.push(sec); song.arrangement.push(sec.id); if (b.lines.length) byKey.set(k, sec);
   }
   // Number duplicate labels ("Verse", "Verse" -> "Verse 1", "Verse 2")
@@ -1247,7 +1297,9 @@ function toChordPro(song) {
   for (const id of order) {
     const s = song.sections.find(x => x.id === id); if (!s) continue;
     const env = s.type === "chorus" ? "chorus" : s.type === "bridge" ? "bridge" : "verse";
+    if (s.keyChange) o.push("", "{key: " + s.keyChange + "}");
     o.push("", "{start_of_" + env + ": " + s.label + "}");
+    if (s.note) o.push("{comment: " + s.note + "}");
     s.lines.forEach(l => o.push(lineToCP(l)));
     o.push("{end_of_" + env + "}");
   }
@@ -1339,7 +1391,7 @@ function transposeBy(semis, targetKey) {
   const nk = targetKey || keyName((pk.idx + semis + 12) % 12, pk.minor);
   const flats = keyUsesFlats(nk);
   commit(() => {
-    song.sections.forEach(s => s.lines.forEach(l => l.chords.forEach(c => c.name = tChord(c.name, semis, flats))));
+    song.sections.forEach(s => { s.lines.forEach(l => l.chords.forEach(c => c.name = tChord(c.name, semis, flats))); if (s.keyChange) s.keyChange = tChord(s.keyChange, semis, keyUsesFlats(tChord(s.keyChange, semis, flats)) || flats); });
     song.key = nk;
   });
   toast("Transposed to " + nk);
@@ -1353,7 +1405,7 @@ function transposeBy(semis, targetKey) {
 // lines print on one row instead of chords above an empty lyric.
 const BARTEXT_RE = /^[\s|:.%ˬ\/\-–x\d()]*$/i;
 function isBarLine(l) { return !!(l && l.chords && l.chords.length && BARTEXT_RE.test(l.text)); }
-function lineHTML(l, ctx) {
+function lineHTML(l, ctx, atKey) {
   const T = l.text, n = T.length;
   if (!n && !l.chords.length) return '<div class="line blank-line"></div>';
   const br = new Set(l.breaks);
@@ -1363,7 +1415,7 @@ function lineHTML(l, ctx) {
   for (let bi = 0; bi < bounds.length; bi++) {
     const a = bounds[bi], b = bi + 1 < bounds.length ? bounds[bi + 1] : n; const last = bi === bounds.length - 1;
     const cn = chordAt.get(a);
-    const sc = cn ? shownChord(cn, song) : ""; const shown = cn ? esc(display === "numerals" ? toRoman(sc, song.key) : sc) : "";
+    const sc = cn ? shownChord(cn, song) : ""; const shown = cn ? esc(display === "numerals" ? toRoman(sc, atKey || song.key) : sc) : "";
     h += '<span class="seg"><span class="ch">' + (cn ? (ctx ? '<span class="chord" data-p="' + a + '" title="' + esc(cn) + '">' + shown + "</span>" : shown) : "​") + '</span><span class="ly">';
     for (let i = a; i < b; i++) {
       if (i > a && br.has(i)) h += ctx ? '<span class="ih" data-b="' + i + '">-</span>' : "-";
@@ -1435,6 +1487,8 @@ function renderSections() {
       '<select class="type-in" data-type="' + s.id + '" aria-label="Section type">' + sectionOptions(s.type) + "</select>" +
       '<span class="acts">' + (editing.has(s.id) ? "" : '<button class="mini" data-act="edit" data-s="' + s.id + '">Edit words</button>') +
       '<button class="mini" data-act="dup" data-s="' + s.id + '">Duplicate</button><button class="mini" data-act="del" data-s="' + s.id + '">Delete</button></span></div>' +
+      '<div class="block-sub"><input class="note-in" data-note="' + s.id + '" value="' + esc(s.note || "") + '" placeholder="Add an instruction (e.g. arpeggiated, band out)" aria-label="Instruction for ' + esc(s.label) + '">' +
+      '<select class="kc-in' + (s.keyChange ? " on" : "") + '" data-kc="' + s.id + '" aria-label="Key change before ' + esc(s.label) + '" title="Key change at the start of this section">' + keyChangeOptions(s.keyChange || "", "No key change") + "</select></div>" +
       '<div class="block-body ed">' + body + "</div>" +
       (times === 0 ? '<div class="repeat-note">Not in the song order yet. Use “+ Add” above to place it.</div>' : times > 1 ? '<div class="repeat-note">Sung ' + times + " times in the song order.</div>" : "") +
       "</section>";
@@ -1444,10 +1498,11 @@ function renderPreview() {
   if (!showPreview) return;
   const s = song; let h = "<h2>" + esc(s.title || "Untitled song") + "</h2>";
   if (s.artist) h += '<div class="by">' + esc(s.artist) + "</div>";
-  h += '<div class="facts">' + (s.key ? "<span>Key <b>" + esc(s.key) + "</b></span>" : "") + (s.tempo ? "<span>Tempo <b>" + esc(s.tempo) + "</b></span>" : "") + (s.time ? "<span>Time <b>" + esc(s.time) + "</b></span>" : "") + (s.mode ? "<span>Mode <b>" + esc(s.mode) + "</b></span>" : "") + (hymnalText(s) ? "<span>Hymnal <b>" + esc(hymnalText(s)) + "</b></span>" : "") + "</div>";
+  h += '<div class="facts">' + (s.key ? "<span>Key <b>" + esc(keyPath(s)) + "</b></span>" : "") + (s.tempo ? "<span>Tempo <b>" + esc(s.tempo) + "</b></span>" : "") + (s.time ? "<span>Time <b>" + esc(s.time) + "</b></span>" : "") + (s.mode ? "<span>Mode <b>" + esc(s.mode) + "</b></span>" : "") + (hymnalText(s) ? "<span>Hymnal <b>" + esc(hymnalText(s)) + "</b></span>" : "") + "</div>";
   const order = s.arrangement.map(secById).filter(Boolean);
   if (order.length) h += '<div class="orderline">' + order.map(x => esc(abbrOf(x))).join(" · ") + "</div>";
-  order.forEach(sec => { h += '<div class="psec t-' + sec.type + '"><h3>' + esc(sec.label) + '</h3><div class="chart">' + sec.lines.map(l => lineHTML(l, null)).join("") + "</div></div>"; });
+  let pk = s.key;
+  order.forEach(sec => { if (sec.keyChange) pk = sec.keyChange; h += '<div class="psec t-' + sec.type + '">' + (sec.keyChange ? '<div class="kcbox">KEY CHANGE: ' + esc(sec.keyChange) + "</div>" : "") + "<h3>" + esc(sec.label) + "</h3>" + (sec.note ? '<div class="pnote">' + esc(sec.note) + "</div>" : "") + '<div class="chart">' + sec.lines.map(l => lineHTML(l, null, pk)).join("") + "</div></div>"; });
   if (s.copyright) h += '<div class="foot">' + esc(s.copyright) + "</div>";
   $("sheet").innerHTML = h;
 }
@@ -1585,13 +1640,16 @@ function bindEditor() {
   root.addEventListener("mouseover", (e) => { const g = e.target.closest(".gap.crowd"); if (g && !g.title) g.title = "Chords are crowded inside this word. Click to split the word into syllables here."; });
   root.addEventListener("change", (e) => {
     const lab = e.target.closest("[data-label]"); const typ = e.target.closest("[data-type]");
+    const nt = e.target.closest("[data-note]"); const kc = e.target.closest("[data-kc]");
+    if (nt) { const s = secById(nt.dataset.note); const v = nt.value.trim(); if (v !== (s.note || "")) commit(() => { if (v) s.note = v; else delete s.note; }); }
+    if (kc) { const s = secById(kc.dataset.kc); const v = kc.value; commit(() => { if (v) s.keyChange = v; else delete s.keyChange; }); }
     if (lab) { const v = lab.value.trim(); const s = secById(lab.dataset.label); if (v && v !== s.label) commit(() => { s.label = v; }); else lab.value = s.label; }
     if (typ) {
       const s = secById(typ.dataset.type); const nt = typ.value;
       commit(() => { const wasAuto = new RegExp("^" + TYPES[s.type].name + "( \\d+)?$", "i").test(s.label); s.type = nt; if (wasAuto) s.label = autoLabel(nt, song, s.id); });
     }
   });
-  root.addEventListener("keydown", (e) => { if (e.target.matches(".label-in") && e.key === "Enter") e.target.blur(); });
+  root.addEventListener("keydown", (e) => { if (e.target.matches(".label-in, .note-in") && e.key === "Enter") e.target.blur(); });
   sortable(root, ".block", ".grip", "y", (from, to) => commit(() => {
     const simple = song.arrangement.join() === song.sections.map(s => s.id).join();
     moveItem(song.sections, from, to);
@@ -1856,7 +1914,7 @@ function loadSong(s, isNew) {
   closePop(); editing.clear(); undo = []; redo = [];
   if (saveTimer && song) flushSave();
   song = s; if (!song.arrangement) song.arrangement = song.sections.map(x => x.id);
-  if (liftHymnal(song) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
+  if ((liftHymnal(song) | liftSectionNotes(song)) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
   store("ccb.last", song.id);
   if (isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; flushSave(); }
   renderAll(); renderSongList();
@@ -2361,7 +2419,7 @@ function layoutSong(sg, S, M, k, limitH) {
   if (sg.simplify) sg = Object.assign({}, sg, { simplify: false, sections: sg.sections.map(x => Object.assign({}, x, { lines: x.lines.map(l => Object.assign({}, l, { chords: l.chords.map(c => Object.assign({}, c, { name: simplifyChord(c.name) })) })) })) });
   const [pw, ph] = pageDims(S); const mg = S.margin * 72;
   const cols = +S.columns || 1, gutter = 22; const colW = (pw - 2 * mg - gutter * (cols - 1)) / cols;
-  const meta = S.metaSize ? S.metaSize * k : Math.max(8, 10 * Math.min(1, k + 0.1)); const key = sg.key;
+  const meta = S.metaSize ? S.metaSize * k : Math.max(8, 10 * Math.min(1, k + 0.1)); let key = sg.key;
   const pages = []; let page, col, y, top, bottom;
   const copyLines = S.showCopyright && sg.copyright ? sg.copyright.split("\n").filter(Boolean) : [];
   const footH = (p) => (p === 0 ? copyLines.length * 9.5 : 0) + (S.pageNumbers ? 14 : 0) + ((p === 0 && copyLines.length) || S.pageNumbers ? 6 : 0);
@@ -2371,7 +2429,7 @@ function layoutSong(sg, S, M, k, limitH) {
     if (pi === 0) {
       const ts = S.titleSize * k; text(mg, yy + ts * 0.8, sg.title || "Untitled song", ts, true, "#000000"); yy += ts * 1.08;
       const left = S.showArtist && sg.artist ? sg.artist : "";
-      const info = S.showInfo ? [sg.key ? "Key: " + pdfKey(sg.key, S) : "", sg.tempo ? "Tempo: " + sg.tempo : "", sg.time ? "Time: " + sg.time : "", sg.mode ? "Mode: " + sg.mode : "", hymnalText(sg)].filter(Boolean).join("     ") : "";
+      const info = S.showInfo ? [sg.key ? "Key: " + pdfKey(keyPath(sg), S) : "", sg.tempo ? "Tempo: " + sg.tempo : "", sg.time ? "Time: " + sg.time : "", sg.mode ? "Mode: " + sg.mode : "", hymnalText(sg)].filter(Boolean).join("     ") : "";
       if (left || info) {
         if (left) text(mg, yy + meta * 0.95, left, meta, false, "#333333");
         if (info) text(pw - mg - M(info, false, meta), yy + meta * 0.95, info, meta, false, "#333333");
@@ -2388,7 +2446,7 @@ function layoutSong(sg, S, M, k, limitH) {
   const colX = () => mg + col * (colW + gutter);
   const nextCol = () => { if (col + 1 < cols) { col++; y = top; } else startPage(); };
   const atTop = () => y <= top + 0.01;
-  const put = (blk) => { blk.items.forEach(it => page.items.push(Object.assign({}, it, { x: colX() + it.x, y: y + it.dy }))); y += blk.h; };
+  const put = (blk) => { blk.items.forEach(it => page.items.push(it.t === "line" ? Object.assign({}, it, { x1: colX() + it.x1, x2: colX() + it.x2, y1: y + it.y1, y2: y + it.y2 }) : Object.assign({}, it, { x: colX() + it.x, y: y + it.dy }))); y += blk.h; };
 
   startPage();
   const seen = new Set(); const ls = S.lyricSize * k;
@@ -2398,7 +2456,16 @@ function layoutSong(sg, S, M, k, limitH) {
     const lsz = S.labelSize * k; const lab = S.labelCaps ? sec.label.toUpperCase() : sec.label;
     const labItems = [{ t: "text", x: 0, dy: lsz * 0.9, s: lab, size: lsz, bold: true, color: S.labelColored ? (PRINT_SEC[sec.type] || "#000000") : "#000000" }];
     if (repeat) labItems.push({ t: "text", x: M(lab, true, lsz) + lsz * 0.6, dy: lsz * 0.9, s: "(repeat)", size: lsz, bold: false, color: "#666666" });
-    const labelRow = { h: lsz * 1.45, items: labItems };
+    if (sec.keyChange) {
+      key = sec.keyChange;
+      const ks = lsz * 0.92, kt = "KEY CHANGE: " + pdfChord(sec.keyChange, S, sec.keyChange), kw = M(kt, true, ks) + ks * 1.2, kh = ks * 1.55, kx = 0, ky = 0;
+      const bx = (x1, y1, x2, y2) => ({ t: "line", x1, y1, x2, y2, color: "#000000", w: 1 });
+      labItems.forEach(it => it.dy += kh + ks * 0.7);
+      labItems.push({ t: "text", x: kx + ks * 0.6, dy: ky + kh * 0.72, s: kt, size: ks, bold: true, color: "#000000" }, bx(kx, ky, kx + kw, ky), bx(kx + kw, ky, kx + kw, ky + kh), bx(kx + kw, ky + kh, kx, ky + kh), bx(kx, ky + kh, kx, ky));
+    }
+    const kcH = sec.keyChange ? lsz * 0.92 * 1.55 + lsz * 0.92 * 0.7 : 0;
+    const labelRow = { h: lsz * 1.45 + kcH, items: labItems };
+    if (sec.note && !repeat) { const ns = lsz * 0.95; labItems.push({ t: "text", x: 0, dy: labelRow.h + ns * 0.8, s: sec.note, size: ns, bold: false, color: "#555555" }); labelRow.h += ns * 1.35; }
     let rows = [];
     if (!repeat) sec.lines.forEach(l => { if (!l.text.trim() && !l.chords.length) rows.push({ h: ls * 0.6, items: [] }); else rows = rows.concat(layoutLine(l, S, M, k, colW, key)); });
     const total = labelRow.h + rows.reduce((a, r) => a + r.h, 0);
