@@ -90,7 +90,9 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .field { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
 .field input { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 14.5px; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 9px; min-height: 36px; }
 .field.grow { flex: 1 1 220px; } .field.grow input { width: 100%; }
-.field.small input { width: 92px; }
+.field.small input, .field.small select { width: 92px; }
+.field select { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 14.5px; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 6px; min-height: 36px; }
+.field.mid input, .field.mid select { width: 132px; }
 
 /* Song order strip */
 .order { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
@@ -450,6 +452,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
         <button data-disp="letters" class="on" title="Show chord letters (G, Em7)">Letters</button>
         <button data-disp="numerals" title="Show Roman numerals relative to the key (I, vi7)">Numerals</button>
       </div>
+      <button class="btn" id="btnSimplify" aria-pressed="false" title="Show simple chords for this song: D2(no3) shows as D. Slash and sus chords stay. Your real chords are kept.">Simplify</button>
       <span class="spacer"></span>
       <button class="btn" id="btnPreview" aria-pressed="false">Preview</button>
       <div class="menuwrap">
@@ -475,6 +478,12 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
           <label class="field grow">Artist / author<input id="artistIn" placeholder="Who wrote it"></label>
           <label class="field small">Tempo<input id="tempoIn" inputmode="numeric" placeholder="BPM"></label>
           <label class="field small">Time<input id="timeIn" placeholder="4/4"></label>
+        </div>
+        <div class="meta-row">
+          <label class="field mid">Mode<select id="modeIn"><option value="">—</option><option>Major</option><option>Minor</option><option>Dorian</option><option>Phrygian</option><option>Lydian</option><option>Mixolydian</option><option>Aeolian</option><option>Locrian</option></select></label>
+          <label class="field mid">Hymnal<input id="hymnalIn" list="hymnalList" placeholder="e.g. UMH"></label>
+          <label class="field small">Hymnal #<input id="hymnalNoIn" placeholder="#"></label>
+          <datalist id="hymnalList"><option value="UMH"><option value="TFWS"><option value="W&amp;S"></datalist>
         </div>
         <div class="cats" id="songCats"></div>
       </div>
@@ -850,6 +859,22 @@ function degreeOf(idx, p) {
   d = sc.indexOf((off + 1) % 12); if (d >= 0) return "♭" + ROM[d];
   d = sc.indexOf((off + 11) % 12); return "♯" + ROM[d];
 }
+// Simplify chords: keep the root, minor, sus, dim/aug and the slash bass; drop colors like 2, 7, maj7, add9, (no3).
+function simplifyChord(name) {
+  if (!name || /^n\.?c\.?$/i.test(name)) return name;
+  if (/^[A-G][^-]*(-[A-G][^-]*)+$/.test(name)) return name.split("-").map(simplifyChord).join("-");
+  const pm = /^\((.+)\)$/.exec(name); if (pm) return "(" + simplifyChord(pm[1]) + ")";
+  const m = /^([A-G][#b♯♭]?)([^/]*)(\/.*)?$/.exec(name); if (!m) return name;
+  const q = m[2], bass = m[3] || "";
+  let out = m[1];
+  if (/^(m|min|-)(?!aj)/i.test(q) && !/^maj/i.test(q) && !/^M/.test(q)) out += "m";
+  if (/dim|°|(^|[^a-z])o(?=\d|$)/i.test(q)) out = m[1] + "dim";
+  else if (/aug|\+/.test(q)) out = m[1] + "aug";
+  else if (/sus\s*2/i.test(q)) out += "sus2";
+  else if (/sus|^\(?4\)?$/i.test(q)) out += "sus";
+  return out + bass;
+}
+function shownChord(name, sg) { return sg && sg.simplify ? simplifyChord(name) : name; }
 function toRoman(name, key) {
   const p = parseKey(key); if (!p) return name;
   if (/^[A-G][^-]*(-[A-G][^-]*)+$/.test(name)) return name.split("-").map(x => toRoman(x, key)).join("-");
@@ -1140,7 +1165,6 @@ function parseSongText(input, opts) {
     meta.artist = blocks[0].lines[0].text.trim(); blocks.shift();
   }
   if (!meta.copyright && foot.length) meta.copyright = foot.join("\n").replace(/©\s*©/g, "©");
-  if (meta.hymnal) meta.copyright = meta.hymnal + (meta.copyright ? "\n" + meta.copyright : "");
   if (meta.ccli && !/ccli/i.test(meta.copyright)) meta.copyright = (meta.copyright ? meta.copyright + "\n" : "") + "CCLI Song # " + meta.ccli;
   if (opts.fromFile) {
     // A title that wrapped: "Little Drummer Boy (For King And Country" / "Version)" was read as title + artist.
@@ -1169,6 +1193,7 @@ function parseSongText(input, opts) {
 
 function buildSong(blocks, meta) {
   const song = { id: "s" + uid(), title: meta.title || "", artist: meta.artist || "", key: "", tempo: meta.tempo || "", time: meta.time || "", copyright: meta.copyright || "", sections: [], arrangement: [], updatedAt: Date.now() };
+  const hy = meta.hymnal && splitHymnal(meta.hymnal); if (hy) { song.hymnal = hy[0]; song.hymnalNo = hy[1]; }
   const keyOf = (b) => JSON.stringify(b.lines);
   const counts = {};
   blocks.forEach(b => { if (!b.label && b.lines.length) counts[keyOf(b)] = (counts[keyOf(b)] || 0) + 1; });
@@ -1338,7 +1363,7 @@ function lineHTML(l, ctx) {
   for (let bi = 0; bi < bounds.length; bi++) {
     const a = bounds[bi], b = bi + 1 < bounds.length ? bounds[bi + 1] : n; const last = bi === bounds.length - 1;
     const cn = chordAt.get(a);
-    const shown = cn ? esc(display === "numerals" ? toRoman(cn, song.key) : cn) : "";
+    const sc = cn ? shownChord(cn, song) : ""; const shown = cn ? esc(display === "numerals" ? toRoman(sc, song.key) : sc) : "";
     h += '<span class="seg"><span class="ch">' + (cn ? (ctx ? '<span class="chord" data-p="' + a + '" title="' + esc(cn) + '">' + shown + "</span>" : shown) : "​") + '</span><span class="ly">';
     for (let i = a; i < b; i++) {
       if (i > a && br.has(i)) h += ctx ? '<span class="ih" data-b="' + i + '">-</span>' : "-";
@@ -1369,7 +1394,7 @@ function renderAll() {
 }
 function renderMeta() {
   const set = (id, v) => { const el = $(id); if (document.activeElement !== el && el.value !== v) el.value = v; };
-  set("titleIn", song.title); set("artistIn", song.artist); set("tempoIn", song.tempo); set("timeIn", song.time);
+  set("titleIn", song.title); set("artistIn", song.artist); set("tempoIn", song.tempo); set("timeIn", song.time); set("modeIn", song.mode || ""); set("hymnalIn", song.hymnal || ""); set("hymnalNoIn", song.hymnalNo || "");
   const ks = $("keySel"); let opts = '<option value="">Key</option><optgroup label="Major">';
   for (let i = 0; i < 12; i++) { const k = keyName(i, false); opts += '<option>' + k + "</option>"; if (i === 6) opts += "<option>Gb</option>"; }
   opts += '</optgroup><optgroup label="Minor">';
@@ -1379,6 +1404,7 @@ function renderMeta() {
   $("songCats").innerHTML = '<span class="lbl">Categories</span>' + categories.map(c => '<button class="chip' + (mine.includes(c.id) ? " on" : "") + '" data-cat="' + esc(c.id) + '" aria-pressed="' + mine.includes(c.id) + '">' + esc(c.name) + "</button>").join("") +
     '<button class="chip dashed" data-cat="__manage">Edit categories</button>';
   document.querySelectorAll("[data-disp]").forEach(b => b.classList.toggle("on", b.dataset.disp === display));
+  const sb = $("btnSimplify"); sb.setAttribute("aria-pressed", String(!!song.simplify)); sb.classList.toggle("primary", !!song.simplify);
 }
 function setDisplay(d) { display = d; store("ccb.display", d); closePop(); renderAll(); if (d === "numerals" && !song.key) toast("Pick a key so numerals can be worked out."); }
 function sectionOptions(sel) { return Object.keys(TYPES).map(t => '<option value="' + t + '"' + (t === sel ? " selected" : "") + ">" + TYPES[t].name + "</option>").join(""); }
@@ -1418,7 +1444,7 @@ function renderPreview() {
   if (!showPreview) return;
   const s = song; let h = "<h2>" + esc(s.title || "Untitled song") + "</h2>";
   if (s.artist) h += '<div class="by">' + esc(s.artist) + "</div>";
-  h += '<div class="facts">' + (s.key ? "<span>Key <b>" + esc(s.key) + "</b></span>" : "") + (s.tempo ? "<span>Tempo <b>" + esc(s.tempo) + "</b></span>" : "") + (s.time ? "<span>Time <b>" + esc(s.time) + "</b></span>" : "") + "</div>";
+  h += '<div class="facts">' + (s.key ? "<span>Key <b>" + esc(s.key) + "</b></span>" : "") + (s.tempo ? "<span>Tempo <b>" + esc(s.tempo) + "</b></span>" : "") + (s.time ? "<span>Time <b>" + esc(s.time) + "</b></span>" : "") + (s.mode ? "<span>Mode <b>" + esc(s.mode) + "</b></span>" : "") + (hymnalText(s) ? "<span>Hymnal <b>" + esc(hymnalText(s)) + "</b></span>" : "") + "</div>";
   const order = s.arrangement.map(secById).filter(Boolean);
   if (order.length) h += '<div class="orderline">' + order.map(x => esc(abbrOf(x))).join(" · ") + "</div>";
   order.forEach(sec => { h += '<div class="psec t-' + sec.type + '"><h3>' + esc(sec.label) + '</h3><div class="chart">' + sec.lines.map(l => lineHTML(l, null)).join("") + "</div></div>"; });
@@ -1632,7 +1658,7 @@ function bindChrome() {
     transposeBy(semis, nk);
   };
   const metaInput = (id, field) => $(id).addEventListener("input", (e) => { song[field] = e.target.value; song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); renderPreview(); });
-  metaInput("titleIn", "title"); metaInput("artistIn", "artist"); metaInput("tempoIn", "tempo"); metaInput("timeIn", "time");
+  metaInput("titleIn", "title"); metaInput("artistIn", "artist"); metaInput("tempoIn", "tempo"); metaInput("timeIn", "time"); metaInput("modeIn", "mode"); metaInput("hymnalIn", "hymnal"); metaInput("hymnalNoIn", "hymnalNo");
 
   const ol = $("orderList");
   ol.addEventListener("click", (e) => { const x = e.target.closest("[data-rm]"); if (x) { const i = +x.dataset.rm; commit(() => song.arrangement.splice(i, 1)); } });
@@ -1684,6 +1710,7 @@ function bindChrome() {
   document.addEventListener("pointerdown", (e) => { if (pop && !e.target.closest("#pop") && !e.target.closest(".ed .c") && !e.target.closest(".chord")) closePop(); });
 
   $("btnPreview").onclick = () => setPreview(!showPreview);
+  $("btnSimplify").onclick = () => { closePop(); commit(() => { song.simplify = !song.simplify; }); toast(song.simplify ? "Showing simple chords. Your real chords are kept." : "Showing full chords."); };
   $("btnClosePrev").onclick = () => setPreview(false);
   const shareMenu = (open) => { $("shareMenu").hidden = !open; $("btnShare").setAttribute("aria-expanded", String(open)); };
   $("btnShare").onclick = () => shareMenu($("shareMenu").hidden);
@@ -1812,15 +1839,29 @@ function flushSave() {
   });
 }
 function lsAll() { try { return JSON.parse(store("ccb.songs") || "{}") || {}; } catch (e) { return {}; } }
+// "UMH #314" or "UMH 314" -> ["UMH", "314"]
+function splitHymnal(t) { const m = /^\s*([A-Za-z][A-Za-z&]{1,7})\s*#?\s*(\d+[a-z]?)\s*$/.exec(t || ""); return m ? [m[1], m[2]] : null; }
+// Older imports put the hymnal number at the top of the copyright. Move it to its own fields.
+function liftHymnal(s) {
+  if (s.hymnal || !s.copyright) return false;
+  const lines = s.copyright.split("\n"); const h = HYMNAL_RE.test(lines[0].trim()) && splitHymnal(lines[0]);
+  if (!h) return false;
+  s.hymnal = h[0]; s.hymnalNo = h[1]; s.copyright = lines.slice(1).join("\n"); return true;
+}
+function hymnalText(s) {
+  if (!s.hymnal && !s.hymnalNo) { const t = { copyright: s.copyright }; return liftHymnal(t) ? t.hymnal + " #" + t.hymnalNo : ""; }
+  return ((s.hymnal || "") + (s.hymnalNo ? " #" + s.hymnalNo : "")).trim();
+}
 function loadSong(s, isNew) {
   closePop(); editing.clear(); undo = []; redo = [];
   if (saveTimer && song) flushSave();
   song = s; if (!song.arrangement) song.arrangement = song.sections.map(x => x.id);
+  if (liftHymnal(song) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
   store("ccb.last", song.id);
   if (isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; flushSave(); }
   renderAll(); renderSongList();
 }
-function songText(s) { return (s.title + " " + s.artist + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
+function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
 function sortTitle(s) { return (s.title || "Untitled song").replace(/^\s*(the|a|an)\s+/i, "").trim(); }
 function renderSongList() { renderLibrary(); }
 function renderLibrary() {
@@ -1846,7 +1887,7 @@ function renderLibrary() {
   const groups = []; list.forEach(s => { const L = letterOf(s); if (!groups.length || groups[groups.length - 1].L !== L) groups.push({ L, items: [] }); groups[groups.length - 1].items.push(s); });
   $("letters").innerHTML = list.length > 8 ? groups.map(g => '<button data-letter="' + g.L + '">' + g.L + "</button>").join("") : "";
   const catName = (id) => (categories.find(c => c.id === id) || {}).name;
-  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '">' + (selecting ? '<input type="checkbox" class="pick" data-pick="' + esc(s.id) + '" aria-label="Select ' + esc(s.title || "song") + '"' + (picked.has(s.id) ? " checked" : "") + ">" : "") + '<button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button>' + (selecting ? "" : '<button class="del" data-del="' + esc(s.id) + '">Delete</button>') + "</div>").join("")).join("")
+  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '">' + (selecting ? '<input type="checkbox" class="pick" data-pick="' + esc(s.id) + '" aria-label="Select ' + esc(s.title || "song") + '"' + (picked.has(s.id) ? " checked" : "") + ">" : "") + '<button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", hymnalText(s), (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button>' + (selecting ? "" : '<button class="del" data-del="' + esc(s.id) + '">Delete</button>') + "</div>").join("")).join("")
     : '<div class="note">' + (q ? "No songs match “" + esc(q) + "”." : all.length ? "No songs in this category yet. Open a song and tick the category under its title." : "No saved songs yet. Songs save automatically as you edit.") + "</div>";
   shownIds = list.map(s => s.id);
   [...picked].forEach(id => { if (!songs.has(id)) picked.delete(id); });
@@ -2317,6 +2358,7 @@ function layoutLine(l, S, M, k, width, key) {
 }
 
 function layoutSong(sg, S, M, k, limitH) {
+  if (sg.simplify) sg = Object.assign({}, sg, { simplify: false, sections: sg.sections.map(x => Object.assign({}, x, { lines: x.lines.map(l => Object.assign({}, l, { chords: l.chords.map(c => Object.assign({}, c, { name: simplifyChord(c.name) })) })) })) });
   const [pw, ph] = pageDims(S); const mg = S.margin * 72;
   const cols = +S.columns || 1, gutter = 22; const colW = (pw - 2 * mg - gutter * (cols - 1)) / cols;
   const meta = S.metaSize ? S.metaSize * k : Math.max(8, 10 * Math.min(1, k + 0.1)); const key = sg.key;
@@ -2329,7 +2371,7 @@ function layoutSong(sg, S, M, k, limitH) {
     if (pi === 0) {
       const ts = S.titleSize * k; text(mg, yy + ts * 0.8, sg.title || "Untitled song", ts, true, "#000000"); yy += ts * 1.08;
       const left = S.showArtist && sg.artist ? sg.artist : "";
-      const info = S.showInfo ? [sg.key ? "Key: " + pdfKey(sg.key, S) : "", sg.tempo ? "Tempo: " + sg.tempo : "", sg.time ? "Time: " + sg.time : ""].filter(Boolean).join("     ") : "";
+      const info = S.showInfo ? [sg.key ? "Key: " + pdfKey(sg.key, S) : "", sg.tempo ? "Tempo: " + sg.tempo : "", sg.time ? "Time: " + sg.time : "", sg.mode ? "Mode: " + sg.mode : "", hymnalText(sg)].filter(Boolean).join("     ") : "";
       if (left || info) {
         if (left) text(mg, yy + meta * 0.95, left, meta, false, "#333333");
         if (info) text(pw - mg - M(info, false, meta), yy + meta * 0.95, info, meta, false, "#333333");
@@ -3236,7 +3278,7 @@ connectStore().then(() => setTimeout(checkIncomingShare, 300));
 window.addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
 ["online", "offline"].forEach(t => window.addEventListener(t, () => { if (storeMode !== "cloud") return; setStatus(navigator.onLine ? "Back online. Syncing…" : "Offline. Changes sync when you’re back online."); if (navigator.onLine) setTimeout(() => setStatus("All changes saved"), 2500); }));
 document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
-window.__ccb = { parseSongText, fileToSong, pdfToText, toChordPro, toRoman, get song() { return song; } };
+window.__ccb = { simplifyChord, parseSongText, fileToSong, pdfToText, toChordPro, toRoman, get song() { return song; } };
 })();
 </script>
 
