@@ -1570,6 +1570,20 @@ function sectionAction(act, id) {
     while (texts.length && !texts[texts.length - 1].trim()) texts.pop();
     while (texts.length && !texts[0].trim()) texts.shift();
     editing.delete(id);
+    if (!texts.length) {
+      // No words left: this is a chords-only section (an Intro, Turnaround or Instrumental). Keep each line's chords,
+      // spaced out over blank lyrics, or give one blank line to click chords onto. A section with no lines at all
+      // is what a brand-new section looks like, so it would keep showing the word box.
+      commit(() => {
+        const rows = s.lines.filter(l => l.chords.length).map(l => {
+          const ch = l.chords.slice().sort((x, y) => x.pos - y.pos); let pos = 0;
+          const chords = ch.map(c => { const at = pos; pos += Math.max(6, c.name.length + 4); return { pos: at, name: c.name }; });
+          return { text: " ".repeat(pos), chords, breaks: [] };
+        });
+        s.lines = rows.length ? rows : [{ text: " ".repeat(24), chords: [], breaks: [] }];
+      });
+      return;
+    }
     commit(() => {
       const old = s.lines;
       s.lines = texts.map((t, i) => {
