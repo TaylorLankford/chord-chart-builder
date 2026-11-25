@@ -78,6 +78,13 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .field.small input, .field.small select { width: 92px; }
 .field select { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 14.5px; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 6px; min-height: 36px; }
 .field.mid input, .field.mid select { width: 132px; }
+.field textarea { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 14px; font-family: inherit; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 9px; width: 100%; resize: vertical; }
+.more-info { margin-top: 2px; }
+.more-info > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 4px 0; list-style-position: inside; }
+.more-info > summary:hover { color: var(--ink); }
+.more-info[open] > summary { margin-bottom: 6px; }
+.more-info .meta-row { margin-bottom: 8px; }
+.more-sum { font-weight: 500; margin-left: 6px; }
 
 /* Song order strip */
 .order { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
@@ -468,12 +475,26 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
           <label class="field small">Tempo<input id="tempoIn" inputmode="numeric" placeholder="BPM"></label>
           <label class="field small">Time<input id="timeIn" placeholder="4/4"></label>
         </div>
-        <div class="meta-row">
+        <details class="more-info" id="moreInfo">
+          <summary>Additional information <span class="more-sum" id="moreSum"></span></summary>
+          <div class="meta-row">
           <label class="field mid">Mode<select id="modeIn"><option value="">—</option><option>Major</option><option>Minor</option><option>Dorian</option><option>Phrygian</option><option>Lydian</option><option>Mixolydian</option><option>Aeolian</option><option>Locrian</option></select></label>
           <label class="field mid">Hymnal<input id="hymnalIn" list="hymnalList" placeholder="e.g. UMH"></label>
           <label class="field small">Hymnal #<input id="hymnalNoIn" placeholder="#"></label>
           <datalist id="hymnalList"><option value="UMH"><option value="TFWS"><option value="W&amp;S"></datalist>
-        </div>
+          <label class="field mid">CCLI Song #<input id="songCcliIn" inputmode="numeric" placeholder="e.g. 7136201"></label>
+          </div>
+          <div class="meta-row">
+          <label class="field grow">Copyright<textarea id="copyIn" rows="2" placeholder="© 2019 Publisher | Publisher. Prints at the bottom of the PDF."></textarea></label>
+          </div>
+          <div class="meta-row">
+          <label class="field grow">Scripture<input id="scriptureIn" placeholder="e.g. Psalm 103"></label>
+          <label class="field grow">Themes<input id="themesIn" placeholder="e.g. Advent, grace, communion"></label>
+          </div>
+          <div class="meta-row">
+          <label class="field grow">Notes (just for you, not printed)<textarea id="notesIn" rows="2" placeholder="Arrangement ideas, who sang it last, capo…"></textarea></label>
+          </div>
+        </details>
         <div class="cats" id="songCats"></div>
       </div>
       <div class="order">
@@ -1196,7 +1217,6 @@ function parseSongText(input, opts) {
     meta.artist = blocks[0].lines[0].text.trim(); blocks.shift();
   }
   if (!meta.copyright && foot.length) meta.copyright = foot.join("\n").replace(/©\s*©/g, "©");
-  if (meta.ccli && !/ccli/i.test(meta.copyright)) meta.copyright = (meta.copyright ? meta.copyright + "\n" : "") + "CCLI Song # " + meta.ccli;
   if (opts.fromFile) {
     // A title that wrapped: "Little Drummer Boy (For King And Country" / "Version)" was read as title + artist.
     if (meta.title && meta.artist && (meta.title.match(/\(/g) || []).length > (meta.title.match(/\)/g) || []).length && /\)$/.test(meta.artist) && meta.artist.length <= 30) { meta.title += " " + meta.artist; meta.artist = ""; }
@@ -1225,6 +1245,7 @@ function parseSongText(input, opts) {
 function buildSong(blocks, meta) {
   const song = { id: "s" + uid(), title: meta.title || "", artist: meta.artist || "", key: "", tempo: meta.tempo || "", time: meta.time || "", copyright: meta.copyright || "", sections: [], arrangement: [], updatedAt: Date.now() };
   const hy = meta.hymnal && splitHymnal(meta.hymnal); if (hy) { song.hymnal = hy[0]; song.hymnalNo = hy[1]; }
+  liftCcli(song); if (meta.ccli && !song.ccli) song.ccli = meta.ccli;
   const keyOf = (b) => JSON.stringify(b.lines);
   const counts = {};
   blocks.forEach(b => { if (!b.label && b.lines.length) counts[keyOf(b)] = (counts[keyOf(b)] || 0) + 1; });
@@ -1273,6 +1294,7 @@ function toChordPro(song) {
   if (song.key) o.push("{key: " + song.key + "}");
   if (song.tempo) o.push("{tempo: " + song.tempo + "}");
   if (song.time) o.push("{time: " + song.time + "}");
+  if (song.ccli) o.push("{ccli: " + song.ccli + "}");
   if (song.copyright) o.push("{copyright: " + song.copyright.replace(/\n/g, " | ") + "}");
   const used = new Set(song.arrangement);
   const order = song.arrangement.concat(song.sections.filter(s => !used.has(s.id)).map(s => s.id));
@@ -1428,7 +1450,8 @@ function renderAll() {
 }
 function renderMeta() {
   const set = (id, v) => { const el = $(id); if (document.activeElement !== el && el.value !== v) el.value = v; };
-  set("titleIn", song.title); set("artistIn", song.artist); set("tempoIn", song.tempo); set("timeIn", song.time); set("modeIn", song.mode || ""); set("hymnalIn", song.hymnal || ""); set("hymnalNoIn", song.hymnalNo || "");
+  set("titleIn", song.title); set("artistIn", song.artist); set("tempoIn", song.tempo); set("timeIn", song.time); set("modeIn", song.mode || ""); set("hymnalIn", song.hymnal || ""); set("hymnalNoIn", song.hymnalNo || ""); set("songCcliIn", song.ccli || ""); set("copyIn", song.copyright || ""); set("scriptureIn", song.scripture || ""); set("themesIn", song.themes || ""); set("notesIn", song.notes || "");
+  $("moreSum").textContent = [song.mode, hymnalText(song), song.ccli ? "CCLI " + song.ccli : "", song.scripture].filter(Boolean).join(" · ");
   const ks = $("keySel"); let opts = '<option value="">Key</option><optgroup label="Major">';
   for (let i = 0; i < 12; i++) { const k = keyName(i, false); opts += '<option>' + k + "</option>"; if (i === 6) opts += "<option>Gb</option>"; }
   opts += '</optgroup><optgroup label="Minor">';
@@ -1485,7 +1508,7 @@ function renderPreview() {
   if (order.length) h += '<div class="orderline">' + order.map(x => esc(abbrOf(x))).join(" · ") + "</div>";
   let pk = s.key;
   order.forEach(sec => { if (sec.keyChange) pk = sec.keyChange; h += '<div class="psec t-' + sec.type + '">' + (sec.keyChange ? '<div class="kcbox">KEY CHANGE: ' + esc(sec.keyChange) + "</div>" : "") + "<h3>" + esc(sec.label) + "</h3>" + (sec.note ? '<div class="pnote">' + esc(sec.note) + "</div>" : "") + '<div class="chart">' + sec.lines.map(l => lineHTML(l, null, pk)).join("") + "</div></div>"; });
-  if (s.copyright) h += '<div class="foot">' + esc(s.copyright) + "</div>";
+  if (fullCopyright(s)) h += '<div class="foot">' + esc(fullCopyright(s)) + "</div>";
   $("sheet").innerHTML = h;
 }
 function renderHint() {
@@ -1698,7 +1721,9 @@ function bindChrome() {
     transposeBy(semis, nk);
   };
   const metaInput = (id, field) => $(id).addEventListener("input", (e) => { song[field] = e.target.value; song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); renderPreview(); });
-  metaInput("titleIn", "title"); metaInput("artistIn", "artist"); metaInput("tempoIn", "tempo"); metaInput("timeIn", "time"); metaInput("modeIn", "mode"); metaInput("hymnalIn", "hymnal"); metaInput("hymnalNoIn", "hymnalNo");
+  metaInput("titleIn", "title"); metaInput("artistIn", "artist"); metaInput("tempoIn", "tempo"); metaInput("timeIn", "time"); metaInput("modeIn", "mode"); metaInput("hymnalIn", "hymnal"); metaInput("hymnalNoIn", "hymnalNo"); metaInput("songCcliIn", "ccli"); metaInput("copyIn", "copyright"); metaInput("scriptureIn", "scripture"); metaInput("themesIn", "themes"); metaInput("notesIn", "notes");
+  try { $("moreInfo").open = localStorage.getItem("ccb.moreInfo") === "1"; } catch (e) {}
+  $("moreInfo").addEventListener("toggle", () => { try { localStorage.setItem("ccb.moreInfo", $("moreInfo").open ? "1" : "0"); } catch (e) {} });
 
   const ol = $("orderList");
   ol.addEventListener("click", (e) => { const x = e.target.closest("[data-rm]"); if (x) { const i = +x.dataset.rm; commit(() => song.arrangement.splice(i, 1)); } });
@@ -1888,6 +1913,14 @@ function liftHymnal(s) {
   if (!h) return false;
   s.hymnal = h[0]; s.hymnalNo = h[1]; s.copyright = lines.slice(1).join("\n"); return true;
 }
+// "CCLI Song # 7136201" lives in its own field; the footer puts it back on top of the copyright.
+function liftCcli(s) {
+  if (s.ccli || !s.copyright) return false;
+  const lines = s.copyright.split("\n"); const i = lines.findIndex(l => /^\s*CCLI\s+Song\s*(?:#|No\.?|Number)?\s*:?\s*\d+\s*$/i.test(l));
+  if (i < 0) return false;
+  s.ccli = /\d+/.exec(lines[i])[0]; lines.splice(i, 1); s.copyright = lines.join("\n"); return true;
+}
+function fullCopyright(s) { return [s.ccli ? "CCLI Song # " + s.ccli : "", s.copyright || ""].filter(Boolean).join("\n"); }
 function hymnalText(s) {
   if (!s.hymnal && !s.hymnalNo) { const t = { copyright: s.copyright }; return liftHymnal(t) ? t.hymnal + " #" + t.hymnalNo : ""; }
   return ((s.hymnal || "") + (s.hymnalNo ? " #" + s.hymnalNo : "")).trim();
@@ -1896,12 +1929,12 @@ function loadSong(s, isNew) {
   closePop(); editing.clear(); undo = []; redo = [];
   if (saveTimer && song) flushSave();
   song = s; if (!song.arrangement) song.arrangement = song.sections.map(x => x.id);
-  if ((liftHymnal(song) | liftSectionNotes(song)) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
+  if ((liftHymnal(song) | liftSectionNotes(song) | liftCcli(song)) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
   store("ccb.last", song.id);
   if (isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; flushSave(); }
   renderAll(); renderSongList();
 }
-function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
+function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.ccli || "") + " " + (s.scripture || "") + " " + (s.themes || "") + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
 function sortTitle(s) { return (s.title || "Untitled song").replace(/^\s*(the|a|an)\s+/i, "").trim(); }
 function renderSongList() { renderLibrary(); }
 function renderLibrary() {
@@ -2403,7 +2436,7 @@ function layoutSong(sg, S, M, k, limitH) {
   const cols = +S.columns || 1, gutter = 22; const colW = (pw - 2 * mg - gutter * (cols - 1)) / cols;
   const meta = S.metaSize ? S.metaSize * k : Math.max(8, 10 * Math.min(1, k + 0.1)); let key = sg.key;
   const pages = []; let page, col, y, top, bottom;
-  const copyLines = S.showCopyright && sg.copyright ? sg.copyright.split("\n").filter(Boolean) : [];
+  const copyLines = S.showCopyright && fullCopyright(sg) ? fullCopyright(sg).split("\n").filter(Boolean) : [];
   const footH = (p) => (p === 0 ? copyLines.length * 9.5 : 0) + (S.pageNumbers ? 14 : 0) + ((p === 0 && copyLines.length) || S.pageNumbers ? 6 : 0);
   const text = (x, yb, s, size, bold, color) => page.items.push({ t: "text", x, y: yb, s, size, bold, color });
   const startPage = () => {
