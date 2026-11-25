@@ -413,11 +413,38 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .modal.narrow{width:min(420px, calc(100vw - 24px))}
 .note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
+/* Home screen */
+.home { position: fixed; inset: 0; z-index: 35; background: var(--bg); overflow: auto; padding: calc(env(safe-area-inset-top, 0px) + 22px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px); }
+.home[hidden] { display: none; }
+.home-in { max-width: 720px; margin: 0 auto; }
+.home-top { display: flex; align-items: flex-start; gap: 10px; }
+.home h1 { font-size: 26px; margin: 0; letter-spacing: -.01em; }
+.home .sub { color: var(--muted); font-size: 14px; margin: 2px 0 16px; }
+.home-search { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+.home-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
+.home-tiles button { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 6px; font: inherit; font-weight: 700; font-size: 14.5px; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 76px; justify-content: center; }
+.home-tiles button i { font-style: normal; font-size: 22px; line-height: 1; }
+.home-tiles button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.home-tiles button:hover { border-color: var(--accent); }
+.home-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.home-h button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 4px 0; }
+.home-list { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
+.home-row { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
+.home-row:last-child { border-bottom: 0; }
+.home-row .open { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 11px 14px; font: inherit; color: var(--ink); }
+.home-row .open:hover { background: var(--hover); }
+.home-row .t { display: block; font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-row .s { display: block; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-row .when { font-size: 12px; color: var(--muted); padding-right: 14px; white-space: nowrap; }
+.home-row .play { margin-right: 12px; border: 0; background: var(--hover); color: var(--accent); border-radius: 8px; padding: 7px 12px; font: inherit; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.home-empty { padding: 14px; color: var(--muted); font-size: 14px; }
+@media (max-width: 520px) { .home-tiles { grid-template-columns: repeat(2, 1fr); } }
 </style>
 
 <div id="app" class="mode-chords">
   <header class="topbar">
     <div class="bar pad">
+      <button class="btn" id="btnHome" title="Go to the home screen">Home</button>
       <button class="btn" id="btnSongs" aria-haspopup="dialog">Songs</button>
       <button class="btn" id="btnSets" aria-haspopup="dialog">Setlists</button>
       <button class="btn" id="btnHelp" aria-haspopup="dialog" title="How to use the app">Help</button>
@@ -466,6 +493,19 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     <div class="hint pad" id="hint"></div>
   </header>
 
+  <section class="home" id="home" aria-label="Home">
+    <div class="home-in">
+      <div class="home-top"><div style="flex:1"><h1>Chord Chart Builder</h1><div class="sub" id="homeSub"></div></div><button class="btn" id="homeHelp">Help</button></div>
+      <input type="search" class="home-search" id="homeSearch" placeholder="Search songs, artists, lyrics, hymnal #…" aria-label="Search songs">
+      <div class="home-tiles">
+        <button class="primary" id="homeNew"><i>＋</i>New song</button>
+        <button id="homeImport"><i>⇩</i>Import</button>
+        <button id="homeLibrary"><i>♫</i>Library</button>
+        <button id="homeSets"><i>☰</i>Setlists</button>
+      </div>
+      <div id="homeLists"></div>
+    </div>
+  </section>
   <main class="work pad" id="work">
     <div class="editor-col">
       <div class="meta">
@@ -555,6 +595,12 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
       <ul>
         <li>In Chords mode, <b>Ctrl+click</b> a letter to split the word just before it. The chord window also has <b>Split word here</b>.</li>
         <li>Or switch to <b>Syllables</b> mode (<b>Ctrl+Space</b> toggles): click a letter to split, click a hyphen to join the word back.</li>
+      </ul>
+    </details>
+    <details><summary>Home screen</summary>
+      <ul>
+        <li>The app opens on <b>Home</b>: search, New song, Import, Library and Setlists, your recent songs, and your setlists with a <b>▶ Perform</b> button.</li>
+        <li>The <b>Home</b> button (top left) takes you back any time. Your song is saved as you go, so nothing is lost.</li>
       </ul>
     </details>
     <details><summary>Sections and song order</summary>
@@ -1970,8 +2016,9 @@ function hymnalText(s) {
   if (!s.hymnal && !s.hymnalNo) { const t = { copyright: s.copyright }; return liftHymnal(t) ? t.hymnal + " #" + t.hymnalNo : ""; }
   return ((s.hymnal || "") + (s.hymnalNo ? " #" + s.hymnalNo : "")).trim();
 }
-function loadSong(s, isNew) {
+function loadSong(s, isNew, quiet) {
   closePop(); editing.clear(); undo = []; redo = [];
+  if (!quiet) { hideHome(); try { const r = JSON.parse(store("ccb.recent") || "[]").filter(x => Array.isArray(x) && x[0] !== s.id); r.unshift([s.id, Date.now()]); store("ccb.recent", JSON.stringify(r.slice(0, 12))); } catch (e) {} }
   if (saveTimer && song) flushSave();
   song = s; if (!song.arrangement) song.arrangement = song.sections.map(x => x.id);
   if ((liftHymnal(song) | liftSectionNotes(song) | liftCcli(song)) && !isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; scheduleSave(); }
@@ -1979,9 +2026,54 @@ function loadSong(s, isNew) {
   if (isNew) { song.updatedAt = Date.now(); userTouched = true; rev++; flushSave(); }
   renderAll(); renderSongList();
 }
+/* ---------- Home screen ---------- */
+function showHome() { closePop(); $("home").hidden = false; $("homeSearch").value = ""; renderHome(); }
+function hideHome() { $("home").hidden = true; }
+function whenText(t) {
+  if (!t) return ""; const d = new Date(t), now = new Date(); const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 864e5);
+  return diff <= 0 ? "Today" : diff === 1 ? "Yesterday" : diff < 7 ? d.toLocaleDateString(undefined, { weekday: "short" }) : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function renderHome() {
+  if (!$("home") || $("home").hidden) return;
+  const all = [...songs.values()];
+  $("homeSub").textContent = all.length ? all.length + " song" + (all.length === 1 ? "" : "s") + (setlists.size ? " · " + setlists.size + " setlist" + (setlists.size === 1 ? "" : "s") : "") : "Start with a new song or import the charts you have.";
+  const row = (s, right) => '<div class="home-row"><button class="open" data-home-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, hymnalText(s), s.key ? "Key " + s.key : ""].filter(Boolean).join(" · ") || "No details yet") + "</span></button>" + (right || "") + "</div>";
+  const q = $("homeSearch").value.trim().toLowerCase();
+  let h = "";
+  if (q) {
+    const hits = all.filter(s => songText(s).includes(q)).sort((a, b) => sortTitle(a).localeCompare(sortTitle(b), undefined, { sensitivity: "base" }));
+    h += '<div class="home-h">' + hits.length + " match" + (hits.length === 1 ? "" : "es") + "</div>" + '<div class="home-list">' + (hits.length ? hits.slice(0, 40).map(s => row(s)).join("") : '<div class="home-empty">No songs match “' + esc(q) + "”.</div>") + "</div>";
+  } else {
+    // Songs opened on this device, newest first; topped up with recently edited songs (which may have been edited on another device).
+    let recent = []; try { recent = JSON.parse(store("ccb.recent") || "[]").filter(x => Array.isArray(x) && songs.get(x[0])).map(x => ({ s: songs.get(x[0]), t: x[1] })); } catch (e) {}
+    if (recent.length < 5) all.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(s => { if (recent.length < 5 && !recent.some(r => r.s === s)) recent.push({ s, t: s.updatedAt }); });
+    recent = recent.slice(0, 5);
+    h += '<div class="home-h">Recent songs<button data-home="library">Library ›</button></div><div class="home-list">' + (recent.length ? recent.map(r => row(r.s, '<span class="when">' + esc(whenText(r.t)) + "</span>")).join("") : '<div class="home-empty">No songs yet.</div>') + "</div>";
+    const sets = setlistSorted().slice(0, 4);
+    h += '<div class="home-h">Setlists<button data-home="sets">All ›</button></div><div class="home-list">' + (sets.length ? sets.map(sl => '<div class="home-row"><button class="open" data-home-set="' + esc(sl.id) + '"><span class="t">' + esc(sl.name || "Untitled setlist") + '</span><span class="s">' + esc([sl.date ? fmtDate(sl.date) : "", sl.items.length + " song" + (sl.items.length === 1 ? "" : "s")].filter(Boolean).join(" · ")) + '</span></button>' + (sl.items.length ? '<button class="play" data-home-play="' + esc(sl.id) + '">▶ Perform</button>' : "") + "</div>").join("") : '<div class="home-empty">No setlists yet. Make one for Sunday, then perform it with your pedal.</div>') + "</div>";
+  }
+  $("homeLists").innerHTML = h;
+}
+function wireHome() {
+  $("btnHome").onclick = showHome;
+  $("homeHelp").onclick = () => $("btnHelp").click();
+  $("homeNew").onclick = () => $("btnNew").click();
+  $("homeImport").onclick = () => $("btnOpen").click();
+  $("homeLibrary").onclick = () => $("btnSongs").click();
+  $("homeSets").onclick = () => openSetlists();
+  $("homeSearch").addEventListener("input", renderHome);
+  $("homeLists").addEventListener("click", (e) => {
+    const o = e.target.closest("[data-home-open]"), st = e.target.closest("[data-home-set]"), pl = e.target.closest("[data-home-play]"), nav = e.target.closest("[data-home]");
+    if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); }
+    else if (pl) { const sl = setlists.get(pl.dataset.homePlay); if (sl) playSetlist(sl, 0); }
+    else if (st) { if (setlists.has(st.dataset.homeSet)) { openSetlists(); editSetlist(st.dataset.homeSet); } }
+    else if (nav) { if (nav.dataset.home === "library") $("btnSongs").click(); else openSetlists(); }
+  });
+}
 function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.ccli || "") + " " + (s.scripture || "") + " " + (s.themes || "") + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
 function sortTitle(s) { return (s.title || "Untitled song").replace(/^\s*(the|a|an)\s+/i, "").trim(); }
-function renderSongList() { renderLibrary(); }
+function renderSongList() { renderLibrary(); renderHome(); }
 function renderLibrary() {
   const q = $("songSearch").value.trim().toLowerCase();
   const all = [...songs.values()];
@@ -2241,7 +2333,7 @@ async function connectStore() {
     try { const c = JSON.parse(store("ccb.cats") || "null"); if (c && Array.isArray(c.categories)) categories = c.categories; } catch (e) {}
     renderMeta();
     const all = lsAll(); Object.values(all).forEach(s => songs.set(s.id, s)); renderSongList(); watchSetlists();
-    if (!userTouched) { const last = all[store("ccb.last")] || Object.values(all).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]; if (last) loadSong(clone(last), false); }
+    if (!userTouched) { const last = all[store("ccb.last")] || Object.values(all).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]; if (last) loadSong(clone(last), false, true); }
     setStatus("Saving in this browser only");
   };
   if (!IN_CLAUDE) {
@@ -2283,7 +2375,7 @@ async function connectStore() {
     songs.clear(); snap.docs.forEach(d => { const v = d.data(); if (v) songs.set(d.id, v); });
     if (first && (!snap.metadata.fromCache || (storeMode === "cloud" && (snap.docs.length || !navigator.onLine)))) {
       first = false; clearTimeout(timer); setStatus(storeMode === "cloud" && !navigator.onLine ? "Offline. Changes sync when you’re back online." : "All changes saved");
-      if (!userTouched && song.id === "example") { const last = songs.get(store("ccb.last")) || [...songs.values()][0]; if (last) loadSong(clone(last), false); }
+      if (!userTouched && song.id === "example") { const last = songs.get(store("ccb.last")) || [...songs.values()][0]; if (last) loadSong(clone(last), false, true); }
     }
     const remote = songs.get(song.id);
     if (remote && rev === savedRev && !saving && (remote.updatedAt || 0) > (song.updatedAt || 0) && !pop && !editing.size) { song = clone(remote); renderAll(); }
@@ -3088,6 +3180,7 @@ function watchSetlists() {
     setlists.clear(); snap.docs.forEach(d => { const v = d.data(); if (v) setlists.set(d.id, v); });
     if (curSet && setlists.has(curSet.id) && !setSaveTimer) { /* keep local edits */ }
     if (!$("setDrawer").hidden) { if (!$("setListView").hidden) renderSetRows(); }
+    renderHome();
   }, () => {});
 }
 
@@ -3250,6 +3343,7 @@ function perfZoom(d) { perfCfg.zoom = Math.max(0.6, Math.min(2.2, +(perfCfg.zoom
 function applyPerfClasses() { $("perf").classList.toggle("dark", perfCfg.theme === "dark"); $("perf").classList.toggle("scroll", perfCfg.mode === "scroll"); }
 function bindPerformance() {
   $("btnPerform").onclick = performCurrent;
+  wireHome();
   window.addEventListener("keydown", onPerfKey, true);
   const st = $("perfStage"); let down = null;
   st.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
