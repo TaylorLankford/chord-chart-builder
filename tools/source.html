@@ -413,32 +413,24 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .modal.narrow{width:min(420px, calc(100vw - 24px))}
 .note.bad{color:var(--warn)}
 .backup-row .note{flex:1;min-width:180px;margin:0}
-/* Home screen */
-.home { position: fixed; inset: 0; z-index: 35; background: var(--bg); overflow: auto; padding: calc(env(safe-area-inset-top, 0px) + 22px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px); }
+/* Home screen: Library, Setlists and Recent songs in one centered column */
+.home { position: fixed; inset: 0; z-index: 35; background: var(--bg); overflow: auto; padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .home[hidden] { display: none; }
-.home-in { max-width: 720px; margin: 0 auto; }
-.home-top { display: flex; align-items: flex-start; gap: 10px; }
-.home h1 { font-size: 26px; margin: 0; letter-spacing: -.01em; }
-.home .sub { color: var(--muted); font-size: 14px; margin: 2px 0 16px; }
-.home-search { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
-.home-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
-.home-tiles button { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 6px; font: inherit; font-weight: 700; font-size: 14.5px; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 76px; justify-content: center; }
-.home-tiles button i { font-style: normal; font-size: 22px; line-height: 1; }
-.home-tiles button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.home-tiles button:hover { border-color: var(--accent); }
-.home-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
-.home-h button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 4px 0; }
-.home-list { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
-.home-row { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
-.home-row:last-child { border-bottom: 0; }
-.home-row .open { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 11px 14px; font: inherit; color: var(--ink); }
-.home-row .open:hover { background: var(--hover); }
-.home-row .t { display: block; font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-row .s { display: block; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-row .when { font-size: 12px; color: var(--muted); padding-right: 14px; white-space: nowrap; }
-.home-row .play { margin-right: 12px; border: 0; background: var(--hover); color: var(--accent); border-radius: 8px; padding: 7px 12px; font: inherit; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
-.home-empty { padding: 14px; color: var(--muted); font-size: 14px; }
-@media (max-width: 520px) { .home-tiles { grid-template-columns: repeat(2, 1fr); } }
+.home-in { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.home-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.home-top .spacer { flex: 1; }
+.home-tabs { align-self: center; }
+@media (max-width: 520px) { .home-top .brand { flex-basis: 100%; } .home-top .spacer { display: none; } }
+.home-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-height: 60vh; }
+.home-panel input[type=search] { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); min-height: 40px; font: inherit; color: var(--ink); width: 100%; }
+.home-panel .songlist { overflow: visible; flex: none; }
+.home-panel .setitems { max-height: none; }
+.home-panel .note { font-size: 12.5px; color: var(--muted); }
+.home-panel #setClose { display: none; }
+.home-panel h2 { margin: 0; font-size: 18px; }
+.lib-search { display: flex; gap: 8px; align-items: center; }
+.lib-search input { flex: 1; min-width: 0; }
+.songrow .when { font-size: 12px; color: var(--muted); padding-right: 10px; white-space: nowrap; }
 </style>
 
 <div id="app" class="mode-chords">
@@ -495,15 +487,19 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 
   <section class="home" id="home" aria-label="Home">
     <div class="home-in">
-      <div class="home-top"><div style="flex:1"><h1>Chord Chart Builder</h1><div class="sub" id="homeSub"></div></div><button class="btn" id="homeHelp">Help</button></div>
-      <input type="search" class="home-search" id="homeSearch" placeholder="Search songs, artists, lyrics, hymnal #…" aria-label="Search songs">
-      <div class="home-tiles">
-        <button class="primary" id="homeNew"><i>＋</i>New song</button>
-        <button id="homeImport"><i>⇩</i>Import</button>
-        <button id="homeLibrary"><i>♫</i>Library</button>
-        <button id="homeSets"><i>☰</i>Setlists</button>
+      <div class="home-top">
+        <span class="brand">Chord Chart Builder</span><span class="spacer"></span>
+        <button class="btn primary" id="homeNew">New song</button>
+        <button class="btn" id="homeImport">Import</button>
+        <button class="btn" id="homeHelp">Help</button>
       </div>
-      <div id="homeLists"></div>
+      <div class="segbtns home-tabs" role="tablist" aria-label="Home">
+        <button data-htab="library" class="on" role="tab">Library</button>
+        <button data-htab="sets" role="tab">Setlists</button>
+        <button data-htab="recent" role="tab">Recent songs</button>
+      </div>
+      <div class="home-panel" id="homePanel"></div>
+      <div id="homeRecent" class="songlist" hidden></div>
     </div>
   </section>
   <main class="work pad" id="work">
@@ -599,7 +595,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
     </details>
     <details><summary>Home screen</summary>
       <ul>
-        <li>The app opens on <b>Home</b>: search, New song, Import, Library and Setlists, your recent songs, and your setlists with a <b>▶ Perform</b> button.</li>
+        <li>The app opens on <b>Home</b>, with three tabs: <b>Library</b> (search, categories, A–Z), <b>Setlists</b> (make, edit and perform sets), and <b>Recent songs</b>.</li>
         <li>The <b>Home</b> button (top left) takes you back any time. Your song is saved as you go, so nothing is lost.</li>
       </ul>
     </details>
@@ -694,6 +690,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 </div>
 
 <div class="drawer right" id="setDrawer" hidden role="dialog" aria-label="Setlists">
+  <div id="setBody" class="setview">
   <div id="setListView" class="setview">
     <div style="display:flex;align-items:center;gap:8px"><h2>Setlists</h2><span class="spacer"></span><button class="btn primary" id="setNew">New setlist</button><button class="btn" id="setClose">Close</button></div>
     <div class="songlist" id="setRows"></div>
@@ -710,6 +707,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
       <div class="songlist" id="setPick"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center"><span class="note" id="setNote"></span><span class="spacer"></span><button class="btn" id="setDel">Delete setlist</button></div>
+  </div>
   </div>
 </div>
 
@@ -748,8 +746,9 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 <div class="scrim" id="scrim" hidden></div>
 
 <div class="drawer" id="drawer" hidden role="dialog" aria-label="Songs">
-  <div style="display:flex;align-items:center;gap:8px"><h2>Library</h2><span class="spacer"></span><button class="btn" id="libSelect">Select</button><button class="btn" id="drawerClose">Close</button></div>
-  <input type="search" id="songSearch" placeholder="Search title, artist or lyrics">
+  <div style="display:flex;align-items:center;gap:8px"><h2>Library</h2><span class="spacer"></span><button class="btn" id="drawerClose">Close</button></div>
+  <div id="libBody" class="setview">
+  <div class="lib-search"><input type="search" id="songSearch" placeholder="Search title, artist, lyrics, hymnal #, themes"><button class="btn" id="libSelect">Select</button></div>
   <div class="chips" id="catFilter"></div>
   <div class="cat-edit" id="catEdit" hidden></div>
   <div class="letters" id="letters"></div>
@@ -758,6 +757,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
   <div class="note" id="storeNote"></div>
   <div class="backup-row" id="syncRow" hidden></div>
   <div class="backup-row"><button class="btn" id="btnBackup">Back up library</button><span class="note">Saves every song, setlist, category and export look in one file. To restore, Import that file.</span></div>
+  </div>
 </div>
 
 <div class="modal narrow" id="signModal" hidden role="dialog" aria-label="Sign in">
@@ -2027,49 +2027,44 @@ function loadSong(s, isNew, quiet) {
   renderAll(); renderSongList();
 }
 /* ---------- Home screen ---------- */
-function showHome() { closePop(); $("home").hidden = false; $("homeSearch").value = ""; renderHome(); }
+// Home shows the same Library and Setlists panels as the side drawers. The panels are moved, not copied,
+// so search, categories, Select, setlist editing and every button behave the same in both places.
+let homeTab = "library";
+function dock(id, where) { const n = $(id), host = $(where); if (n.parentElement !== host) host.appendChild(n); }
+function showHome() { closePop(); closeModals(); $("home").hidden = false; if ($("songSearch").value) $("songSearch").value = ""; setHomeTab(homeTab); }
 function hideHome() { $("home").hidden = true; }
+function homeOn() { return !$("home").hidden; }
+function setHomeTab(t) {
+  homeTab = t; document.querySelectorAll("[data-htab]").forEach(b => { b.classList.toggle("on", b.dataset.htab === t); b.setAttribute("aria-selected", String(b.dataset.htab === t)); });
+  const panel = $("homePanel");
+  if ($("libBody").parentElement === panel) dock("libBody", "drawer");
+  if ($("setBody").parentElement === panel) dock("setBody", "setDrawer");
+  if ($("homeRecent").parentElement === panel) dock("homeRecent", "home");
+  $("homeRecent").hidden = t !== "recent";
+  if (t === "library") { dock("libBody", "homePanel"); renderLibrary(); }
+  else if (t === "sets") { dock("setBody", "homePanel"); renderSetRows(); if ($("setEditView").hidden) showSetView("list"); }
+  else { dock("homeRecent", "homePanel"); renderHome(); }
+}
 function whenText(t) {
   if (!t) return ""; const d = new Date(t), now = new Date(); const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(now) - day(d)) / 864e5);
   return diff <= 0 ? "Today" : diff === 1 ? "Yesterday" : diff < 7 ? d.toLocaleDateString(undefined, { weekday: "short" }) : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+// Recent songs: opened on this device, newest first, topped up with recently edited songs (maybe edited on another device).
 function renderHome() {
-  if (!$("home") || $("home").hidden) return;
+  if (!$("home") || !homeOn() || homeTab !== "recent") return;
   const all = [...songs.values()];
-  $("homeSub").textContent = all.length ? all.length + " song" + (all.length === 1 ? "" : "s") + (setlists.size ? " · " + setlists.size + " setlist" + (setlists.size === 1 ? "" : "s") : "") : "Start with a new song or import the charts you have.";
-  const row = (s, right) => '<div class="home-row"><button class="open" data-home-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, hymnalText(s), s.key ? "Key " + s.key : ""].filter(Boolean).join(" · ") || "No details yet") + "</span></button>" + (right || "") + "</div>";
-  const q = $("homeSearch").value.trim().toLowerCase();
-  let h = "";
-  if (q) {
-    const hits = all.filter(s => songText(s).includes(q)).sort((a, b) => sortTitle(a).localeCompare(sortTitle(b), undefined, { sensitivity: "base" }));
-    h += '<div class="home-h">' + hits.length + " match" + (hits.length === 1 ? "" : "es") + "</div>" + '<div class="home-list">' + (hits.length ? hits.slice(0, 40).map(s => row(s)).join("") : '<div class="home-empty">No songs match “' + esc(q) + "”.</div>") + "</div>";
-  } else {
-    // Songs opened on this device, newest first; topped up with recently edited songs (which may have been edited on another device).
-    let recent = []; try { recent = JSON.parse(store("ccb.recent") || "[]").filter(x => Array.isArray(x) && songs.get(x[0])).map(x => ({ s: songs.get(x[0]), t: x[1] })); } catch (e) {}
-    if (recent.length < 5) all.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(s => { if (recent.length < 5 && !recent.some(r => r.s === s)) recent.push({ s, t: s.updatedAt }); });
-    recent = recent.slice(0, 5);
-    h += '<div class="home-h">Recent songs<button data-home="library">Library ›</button></div><div class="home-list">' + (recent.length ? recent.map(r => row(r.s, '<span class="when">' + esc(whenText(r.t)) + "</span>")).join("") : '<div class="home-empty">No songs yet.</div>') + "</div>";
-    const sets = setlistSorted().slice(0, 4);
-    h += '<div class="home-h">Setlists<button data-home="sets">All ›</button></div><div class="home-list">' + (sets.length ? sets.map(sl => '<div class="home-row"><button class="open" data-home-set="' + esc(sl.id) + '"><span class="t">' + esc(sl.name || "Untitled setlist") + '</span><span class="s">' + esc([sl.date ? fmtDate(sl.date) : "", sl.items.length + " song" + (sl.items.length === 1 ? "" : "s")].filter(Boolean).join(" · ")) + '</span></button>' + (sl.items.length ? '<button class="play" data-home-play="' + esc(sl.id) + '">▶ Perform</button>' : "") + "</div>").join("") : '<div class="home-empty">No setlists yet. Make one for Sunday, then perform it with your pedal.</div>') + "</div>";
-  }
-  $("homeLists").innerHTML = h;
+  let recent = []; try { recent = JSON.parse(store("ccb.recent") || "[]").filter(x => Array.isArray(x) && songs.get(x[0])).map(x => ({ s: songs.get(x[0]), t: x[1] })); } catch (e) {}
+  if (recent.length < 12) all.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(s => { if (recent.length < 12 && !recent.some(r => r.s === s)) recent.push({ s, t: s.updatedAt }); });
+  $("homeRecent").innerHTML = recent.length ? recent.slice(0, 12).map(r => '<div class="songrow"><button class="open" data-home-open="' + esc(r.s.id) + '"><span class="t">' + esc(r.s.title || "Untitled song") + '</span><span class="s">' + esc([r.s.artist, hymnalText(r.s), r.s.key ? "Key " + r.s.key : ""].filter(Boolean).join(" · ") || "No details yet") + '</span></button><span class="when">' + esc(whenText(r.t)) + "</span></div>").join("") : '<div class="note">No songs yet. Use New song or Import to get started.</div>';
 }
 function wireHome() {
   $("btnHome").onclick = showHome;
   $("homeHelp").onclick = () => $("btnHelp").click();
   $("homeNew").onclick = () => $("btnNew").click();
   $("homeImport").onclick = () => $("btnOpen").click();
-  $("homeLibrary").onclick = () => $("btnSongs").click();
-  $("homeSets").onclick = () => openSetlists();
-  $("homeSearch").addEventListener("input", renderHome);
-  $("homeLists").addEventListener("click", (e) => {
-    const o = e.target.closest("[data-home-open]"), st = e.target.closest("[data-home-set]"), pl = e.target.closest("[data-home-play]"), nav = e.target.closest("[data-home]");
-    if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); }
-    else if (pl) { const sl = setlists.get(pl.dataset.homePlay); if (sl) playSetlist(sl, 0); }
-    else if (st) { if (setlists.has(st.dataset.homeSet)) { openSetlists(); editSetlist(st.dataset.homeSet); } }
-    else if (nav) { if (nav.dataset.home === "library") $("btnSongs").click(); else openSetlists(); }
-  });
+  document.querySelectorAll("[data-htab]").forEach(b => b.onclick = () => setHomeTab(b.dataset.htab));
+  $("homeRecent").addEventListener("click", (e) => { const o = e.target.closest("[data-home-open]"); if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); } });
 }
 function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.ccli || "") + " " + (s.scripture || "") + " " + (s.themes || "") + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
 function sortTitle(s) { return (s.title || "Untitled song").replace(/^\s*(the|a|an)\s+/i, "").trim(); }
@@ -2160,7 +2155,7 @@ function saveCats() {
     catch (e) { toast("Couldn’t save your categories. Try again in a moment."); }
   });
 }
-function openDrawer() { selecting = false; picked.clear(); renderSongList(); $("scrim").hidden = false; $("drawer").hidden = false; $("songSearch").focus(); }
+function openDrawer() { dock("libBody", "drawer"); if (homeOn() && homeTab === "library") setHomeTab("recent"); selecting = false; picked.clear(); renderSongList(); $("scrim").hidden = false; $("drawer").hidden = false; $("songSearch").focus(); }
 
 /* ---------- Device storage for the installed app (outside Claude).
    IndexedDB with the same small API the page uses for the account db, so the rest of the app doesn't care
@@ -3104,7 +3099,7 @@ function keyOptions(sel) {
   if (sel && !o.includes(">" + sel + "<")) o = "<option selected>" + esc(sel) + "</option>" + o;
   return o + "</optgroup>";
 }
-function openSetlists() { closeModals(); renderSetRows(); showSetView(curSet && setlists.has(curSet.id) ? "edit" : "list"); if (curSet && setlists.has(curSet.id)) renderSetEdit(); $("scrim").hidden = false; $("setDrawer").hidden = false; }
+function openSetlists() { closeModals(); dock("setBody", "setDrawer"); if (homeOn() && homeTab === "sets") setHomeTab("recent"); renderSetRows(); showSetView(curSet && setlists.has(curSet.id) ? "edit" : "list"); if (curSet && setlists.has(curSet.id)) renderSetEdit(); $("scrim").hidden = false; $("setDrawer").hidden = false; }
 function showSetView(v) { $("setListView").hidden = v !== "list"; $("setEditView").hidden = v !== "edit"; }
 function renderSetRows() {
   const rows = setlistSorted();
@@ -3179,8 +3174,7 @@ function watchSetlists() {
   db.collection("setlists").orderBy("updatedAt", "desc").limit(500).onSnapshot((snap) => {
     setlists.clear(); snap.docs.forEach(d => { const v = d.data(); if (v) setlists.set(d.id, v); });
     if (curSet && setlists.has(curSet.id) && !setSaveTimer) { /* keep local edits */ }
-    if (!$("setDrawer").hidden) { if (!$("setListView").hidden) renderSetRows(); }
-    renderHome();
+    if (!$("setDrawer").hidden || (homeOn() && homeTab === "sets")) { if (!$("setListView").hidden) renderSetRows(); }
   }, () => {});
 }
 
