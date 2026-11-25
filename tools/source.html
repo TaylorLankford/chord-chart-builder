@@ -2065,6 +2065,8 @@ function wireHome() {
   $("homeImport").onclick = () => $("btnOpen").click();
   document.querySelectorAll("[data-htab]").forEach(b => b.onclick = () => setHomeTab(b.dataset.htab));
   $("homeRecent").addEventListener("click", (e) => { const o = e.target.closest("[data-home-open]"); if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); } });
+  // The app opens on Home, so put the Library panel in place now (before, it only moved there when a tab was clicked).
+  if (homeOn()) setHomeTab(homeTab);
 }
 function songText(s) { return (s.title + " " + s.artist + " " + hymnalText(s) + " " + (s.ccli || "") + " " + (s.scripture || "") + " " + (s.themes || "") + " " + (s.sections || []).map(x => x.lines.map(l => l.text).join(" ")).join(" ")).toLowerCase(); }
 function sortTitle(s) { return (s.title || "Untitled song").replace(/^\s*(the|a|an)\s+/i, "").trim(); }
