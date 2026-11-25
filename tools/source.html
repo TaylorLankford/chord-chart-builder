@@ -671,14 +671,15 @@ html.at-home, html.at-home body { overflow: hidden; }
     <details><summary>Accounts and sync</summary>
       <ul>
         <li>Without an account, songs save on this device only.</li>
-        <li><b>Songs</b> → <b>Sign in or create account</b> to sync between your PC and iPad. Songs already on the device join your synced library. Forgot your password? Use <b>Forgot password?</b> in the same window.</li>
+        <li><b>Songs</b> → <b>Sign in or create account</b> to sync between your devices (computer, tablet or phone). Songs already on the device join your synced library. Forgot your password? Use <b>Forgot password?</b> in the same window.</li>
         <li>Everything works offline and catches up when you’re back online.</li>
       </ul>
     </details>
     <details><summary>Installing and updates</summary>
       <ul>
-        <li><b>PC</b> (Edge or Chrome): the install icon at the right of the address bar.</li>
-        <li><b>iPad</b> (Safari): Share → <b>Add to Home Screen</b>.</li>
+        <li><b>Computer</b> (Edge or Chrome): the install icon at the right of the address bar.</li>
+        <li><b>iPhone or iPad</b> (Safari): Share → <b>Add to Home Screen</b>.</li>
+        <li><b>Android</b> (Chrome): menu ⋮ → <b>Install app</b>.</li>
         <li>Updates arrive the next time you open the app. If you see “A new version is ready,” close and reopen it.</li>
       </ul>
     </details>
@@ -706,7 +707,7 @@ html.at-home, html.at-home body { overflow: hidden; }
   <div id="setEditView" class="setview" hidden>
     <div style="display:flex;align-items:center;gap:8px"><button class="btn" id="setBack">&lsaquo; Setlists</button><span class="spacer"></span><button class="btn fbonly" id="setSend">Send</button><button class="btn primary" id="setPlay">Perform</button></div>
     <div class="row" style="gap:8px">
-      <label class="field grow">Name<input id="setName" placeholder="Sunday, Dec 1"></label>
+      <label class="field grow">Name<input id="setName" placeholder="e.g. Sunday service, Friday gig, Rehearsal"></label>
       <label class="field">Date<input id="setDate" type="date"></label>
     </div>
     <div class="setitems" id="setItems"></div>
@@ -1958,7 +1959,7 @@ const APP_URL = "https://taylorlankford.github.io/chord-chart-builder/";
 function appUrl() { return IN_CLAUDE || !/^https?:/.test(location.href) || (location.protocol === "http:" && location.hostname !== "localhost") ? APP_URL : location.origin + location.pathname; }
 async function shareApp() {
   const url = appUrl();
-  const text = "Chord Chart Builder: build chord charts, transpose, export PDFs and perform from an iPad. Open the link, then add it to your Home Screen (iPad: Share > Add to Home Screen; PC: the install icon in the address bar).";
+  const text = "Chord Chart Builder: build chord charts, transpose, export PDFs and perform from your tablet, phone or computer. Open the link, then install it (iPhone/iPad: Share > Add to Home Screen; Android: menu > Install app; computer: the install icon in the address bar).";
   try { if (navigator.share) { await navigator.share({ title: "Chord Chart Builder", text, url }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
   try { await navigator.clipboard.writeText(text + "\n" + url); toast("Link copied. Paste it into a text or email."); }
   catch (e) { toast("Share this link: " + url); }
@@ -2126,7 +2127,7 @@ function renderLibrary() {
   [...picked].forEach(id => { if (!songs.has(id)) picked.delete(id); });
   renderSelBar();
   renderSyncRow();
-  $("storeNote").textContent = storeMode === "db" ? "Songs are saved to your account, so they show up on your computer and your iPad." : storeMode === "cloud" ? (navigator.onLine ? "Songs sync between your devices through your Firebase account." : "You’re offline. Changes are kept on this device and sync when you’re back online.") : storeMode === "device" ? "Songs are saved on this device and work with no internet. Back up now and then to keep a copy." : storeMode === "local" ? "Songs are saved in this browser only. Use Save file to keep a copy." : "Connecting to your saved songs…";
+  $("storeNote").textContent = storeMode === "db" ? "Songs are saved to your account, so they show up on all your devices." : storeMode === "cloud" ? (navigator.onLine ? "Songs sync between your devices through your Firebase account." : "You’re offline. Changes are kept on this device and sync when you’re back online.") : storeMode === "device" ? "Songs are saved on this device and work with no internet. Back up now and then to keep a copy." : storeMode === "local" ? "Songs are saved in this browser only. Use Save file to keep a copy." : "Connecting to your saved songs…";
 }
 function renderSelBar() {
   $("selBar").hidden = !selecting; $("libSelect").textContent = selecting ? "Done" : "Select";
@@ -3133,13 +3134,13 @@ function showSetView(v) { $("setListView").hidden = v !== "list"; $("setEditView
 function renderSetRows() {
   const rows = setlistSorted();
   $("setRows").innerHTML = rows.length ? rows.map(s => '<div class="songrow"><button class="open" data-set="' + esc(s.id) + '"><span class="t">' + esc(s.name || "Untitled setlist") + '</span><span class="s">' + esc([s.date ? fmtDate(s.date) : "", s.items.length + " song" + (s.items.length === 1 ? "" : "s")].filter(Boolean).join(" · ")) + '</span></button><button class="del" data-play="' + esc(s.id) + '">Perform</button></div>').join("")
-    : '<div class="setempty">No setlists yet. Make one for Sunday, then perform it on the iPad with your pedal.</div>';
+    : '<div class="setempty">No setlists yet. Group songs into a set for your next service, rehearsal, gig or class, then perform them in order.</div>';
 }
 function fmtDate(d) { const t = new Date(d + "T12:00:00"); return isNaN(t) ? d : t.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }); }
 function newSetlist() {
-  const d = new Date(); const sun = new Date(d); sun.setDate(d.getDate() + ((7 - d.getDay()) % 7));
-  const iso = sun.getFullYear() + "-" + String(sun.getMonth() + 1).padStart(2, "0") + "-" + String(sun.getDate()).padStart(2, "0");
-  curSet = { id: "s" + uid(), name: "Sunday " + sun.toLocaleDateString(undefined, { month: "short", day: "numeric" }), date: iso, items: [], updatedAt: Date.now() };
+  const d = new Date();
+  const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  curSet = { id: "s" + uid(), name: "New setlist", date: iso, items: [], updatedAt: Date.now() };
   setlists.set(curSet.id, clone(curSet)); persistSetlist(clone(curSet));
   renderSetEdit(); showSetView("edit"); $("setSearch").focus();
 }
@@ -3353,7 +3354,7 @@ function onPerfKey(e) {
   if (e.target && e.target.closest && e.target.closest(".pbtn, .perf-panel button") && (e.key === " " || e.key === "Enter")) e.target.blur();
   const name = e.key === " " ? "Space" : e.key;
   const dir = PEDAL_NEXT.includes(e.key) ? 1 : PEDAL_PREV.includes(e.key) ? -1 : 0;
-  if (!$("perfCtl").hidden) $("pcPedal").innerHTML = 'last key <span class="hit">' + esc(name) + "</span> " + (dir > 0 ? "turns forward ✓" : dir < 0 ? "turns back ✓" : e.key === "Escape" ? "closes controls" : "isn’t used for turning (tell Claude which key your pedal sends)");
+  if (!$("perfCtl").hidden) $("pcPedal").innerHTML = 'last key <span class="hit">' + esc(name) + "</span> " + (dir > 0 ? "turns forward ✓" : dir < 0 ? "turns back ✓" : e.key === "Escape" ? "closes controls" : "isn’t used for turning pages");
   if (e.target && e.target.matches && e.target.matches("input, select, textarea")) return;
   e.stopPropagation();
   if (e.key === "Escape") { e.preventDefault(); if (!$("perfCtl").hidden || !$("perfSet").hidden) closePerfPanels(); else closePerformance(); return; }
