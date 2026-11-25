@@ -380,7 +380,7 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .pc-pedal .hit { color: var(--accent); font-weight: 700; }
 
 .menuwrap { position: relative; }
-.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: min(300px, calc(100vw - 16px)); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .menu[hidden] { display: none; }
 .menusep { height: 1px; background: var(--line); margin: 4px 6px; }
 .menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 9px 10px; color: var(--ink); font: inherit; cursor: pointer; }
@@ -1777,7 +1777,17 @@ function bindChrome() {
   $("btnPreview").onclick = () => setPreview(!showPreview);
   $("btnSimplify").onclick = () => { closePop(); commit(() => { song.simplify = !song.simplify; }); toast(song.simplify ? "Showing simple chords. Your real chords are kept." : "Showing full chords."); };
   $("btnClosePrev").onclick = () => setPreview(false);
-  const shareMenu = (open) => { $("shareMenu").hidden = !open; $("btnShare").setAttribute("aria-expanded", String(open)); };
+  const shareMenu = (open) => {
+    const m = $("shareMenu"); m.hidden = !open; $("btnShare").setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    // Line the menu up with the button's right edge, but keep it on screen. On a portrait iPad the toolbar wraps
+    // and Share can land near the left edge, where a right-aligned menu would run off the screen.
+    m.style.left = "auto"; m.style.right = "0px";
+    const wrap = m.parentElement.getBoundingClientRect(), r = m.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+    const left = Math.max(8, Math.min(r.left, vw - 8 - r.width));
+    if (Math.abs(left - r.left) > 0.5) { m.style.right = "auto"; m.style.left = (left - wrap.left) + "px"; }
+  };
+  window.addEventListener("resize", () => { if (!$("shareMenu").hidden) shareMenu(false); });
   $("btnShare").onclick = () => shareMenu($("shareMenu").hidden);
   document.addEventListener("pointerdown", (e) => { if (!$("shareMenu").hidden && !e.target.closest(".menuwrap")) shareMenu(false); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("shareMenu").hidden) shareMenu(false); });
