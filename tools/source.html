@@ -431,6 +431,11 @@ html.at-home, html.at-home body { overflow: hidden; }
 .home-panel h2 { margin: 0; font-size: 18px; }
 .lib-search { display: flex; gap: 8px; align-items: center; }
 .lib-search input { flex: 1; min-width: 0; }
+.star { border: 0; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; padding: 6px 8px; border-radius: 6px; flex: none; }
+.star:hover { background: var(--hover); }
+.star.on { color: #E0A100; }
+.title-row { display: flex; align-items: center; gap: 4px; }
+.title-row .star { font-size: 26px; }
 .songrow .when { font-size: 12px; color: var(--muted); padding-right: 10px; white-space: nowrap; }
 </style>
 
@@ -497,6 +502,7 @@ html.at-home, html.at-home body { overflow: hidden; }
       <div class="segbtns home-tabs" role="tablist" aria-label="Home">
         <button data-htab="library" class="on" role="tab">Library</button>
         <button data-htab="sets" role="tab">Setlists</button>
+        <button data-htab="favs" role="tab">Favorites</button>
         <button data-htab="recent" role="tab">Recent songs</button>
       </div>
       <div class="home-panel" id="homePanel"></div>
@@ -506,7 +512,7 @@ html.at-home, html.at-home body { overflow: hidden; }
   <main class="work pad" id="work">
     <div class="editor-col">
       <div class="meta">
-        <input class="title-in" id="titleIn" placeholder="Song title" aria-label="Song title">
+        <div class="title-row"><input class="title-in" id="titleIn" placeholder="Song title" aria-label="Song title"><button class="star" id="starBtn" aria-pressed="false" title="Favorite">☆</button></div>
         <div class="meta-row">
           <label class="field grow">Artist / author<input id="artistIn" placeholder="Who wrote it"></label>
           <label class="field small">Tempo<input id="tempoIn" inputmode="numeric" placeholder="BPM"></label>
@@ -596,7 +602,8 @@ html.at-home, html.at-home body { overflow: hidden; }
     </details>
     <details><summary>Home screen</summary>
       <ul>
-        <li>The app opens on <b>Home</b>, with three tabs: <b>Library</b> (search, categories, A–Z), <b>Setlists</b> (make, edit and perform sets), and <b>Recent songs</b>.</li>
+        <li>The app opens on <b>Home</b>, with three tabs: <b>Library</b> (search, categories, A–Z), <b>Setlists</b> (make, edit and perform sets), <b>Favorites</b>, and <b>Recent songs</b>.</li>
+        <li>Tap the <b>☆</b> beside a song (in the Library, or next to the title in the editor) to make it a favorite. Favorites sync to your other devices.</li>
         <li>The <b>Home</b> button (top left) takes you back any time. Your song is saved as you go, so nothing is lost.</li>
       </ul>
     </details>
@@ -1539,6 +1546,7 @@ function renderMeta() {
   $("songCats").innerHTML = '<span class="lbl">Categories</span>' + categories.map(c => '<button class="chip' + (mine.includes(c.id) ? " on" : "") + '" data-cat="' + esc(c.id) + '" aria-pressed="' + mine.includes(c.id) + '">' + esc(c.name) + "</button>").join("") +
     '<button class="chip dashed" data-cat="__manage">Edit categories</button>';
   document.querySelectorAll("[data-disp]").forEach(b => b.classList.toggle("on", b.dataset.disp === display));
+  const fb = $("starBtn"); fb.textContent = song.fav ? "★" : "☆"; fb.classList.toggle("on", !!song.fav); fb.setAttribute("aria-pressed", String(!!song.fav)); fb.title = song.fav ? "Remove from Favorites" : "Add to Favorites";
   const sb = $("btnSimplify"); sb.setAttribute("aria-pressed", String(!!song.simplify)); sb.classList.toggle("primary", !!song.simplify);
 }
 function setDisplay(d) { display = d; store("ccb.display", d); closePop(); renderAll(); if (d === "numerals" && !song.key) toast("Pick a key so numerals can be worked out."); }
@@ -2032,7 +2040,7 @@ function loadSong(s, isNew, quiet) {
 // so search, categories, Select, setlist editing and every button behave the same in both places.
 let homeTab = "library";
 function dock(id, where) { const n = $(id), host = $(where); if (n.parentElement !== host) host.appendChild(n); }
-function showHome() { closePop(); closeModals(); $("home").hidden = false; document.documentElement.classList.add("at-home"); if ($("songSearch").value) $("songSearch").value = ""; setHomeTab(homeTab); }
+function showHome() { closePop(); closeModals(); if (saveTimer && song) flushSave(); $("home").hidden = false; document.documentElement.classList.add("at-home"); if ($("songSearch").value) $("songSearch").value = ""; setHomeTab(homeTab); }
 function hideHome() { $("home").hidden = true; document.documentElement.classList.remove("at-home"); }
 function homeOn() { return !$("home").hidden; }
 function setHomeTab(t) {
@@ -2041,7 +2049,7 @@ function setHomeTab(t) {
   if ($("libBody").parentElement === panel) dock("libBody", "drawer");
   if ($("setBody").parentElement === panel) dock("setBody", "setDrawer");
   if ($("homeRecent").parentElement === panel) dock("homeRecent", "home");
-  $("homeRecent").hidden = t !== "recent";
+  $("homeRecent").hidden = t !== "recent" && t !== "favs";
   if (t === "library") { dock("libBody", "homePanel"); renderLibrary(); }
   else if (t === "sets") { dock("setBody", "homePanel"); renderSetRows(); if ($("setEditView").hidden) showSetView("list"); }
   else { dock("homeRecent", "homePanel"); renderHome(); }
@@ -2052,12 +2060,29 @@ function whenText(t) {
   return diff <= 0 ? "Today" : diff === 1 ? "Yesterday" : diff < 7 ? d.toLocaleDateString(undefined, { weekday: "short" }) : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 // Recent songs: opened on this device, newest first, topped up with recently edited songs (maybe edited on another device).
+function starHTML(s) { return '<button class="star' + (s.fav ? " on" : "") + '" data-star="' + esc(s.id) + '" aria-pressed="' + !!s.fav + '" title="' + (s.fav ? "Remove from Favorites" : "Add to Favorites") + '">' + (s.fav ? "★" : "☆") + "</button>"; }
 function renderHome() {
-  if (!$("home") || !homeOn() || homeTab !== "recent") return;
+  if (!$("home") || !homeOn() || (homeTab !== "recent" && homeTab !== "favs")) return;
   const all = [...songs.values()];
+  const row = (x, right) => '<div class="songrow">' + starHTML(x) + '<button class="open" data-home-open="' + esc(x.id) + '"><span class="t">' + esc(x.title || "Untitled song") + '</span><span class="s">' + esc([x.artist, hymnalText(x), x.key ? "Key " + x.key : ""].filter(Boolean).join(" · ") || "No details yet") + "</span></button>" + (right || "") + "</div>";
+  if (homeTab === "favs") {
+    const favs = all.filter(x => x.fav).sort((a, b) => sortTitle(a).localeCompare(sortTitle(b), undefined, { sensitivity: "base" }));
+    $("homeRecent").innerHTML = favs.length ? favs.map(x => row(x)).join("") : '<div class="note">No favorites yet. Tap the ☆ next to a song (in the Library or beside the song title) to add it here.</div>';
+    return;
+  }
   let recent = []; try { recent = JSON.parse(store("ccb.recent") || "[]").filter(x => Array.isArray(x) && songs.get(x[0])).map(x => ({ s: songs.get(x[0]), t: x[1] })); } catch (e) {}
-  if (recent.length < 12) all.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(s => { if (recent.length < 12 && !recent.some(r => r.s === s)) recent.push({ s, t: s.updatedAt }); });
-  $("homeRecent").innerHTML = recent.length ? recent.slice(0, 12).map(r => '<div class="songrow"><button class="open" data-home-open="' + esc(r.s.id) + '"><span class="t">' + esc(r.s.title || "Untitled song") + '</span><span class="s">' + esc([r.s.artist, hymnalText(r.s), r.s.key ? "Key " + r.s.key : ""].filter(Boolean).join(" · ") || "No details yet") + '</span></button><span class="when">' + esc(whenText(r.t)) + "</span></div>").join("") : '<div class="note">No songs yet. Use New song or Import to get started.</div>';
+  if (recent.length < 12) all.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(x => { if (recent.length < 12 && !recent.some(r => r.s === x)) recent.push({ s: x, t: x.updatedAt }); });
+  $("homeRecent").innerHTML = recent.length ? recent.slice(0, 12).map(r => row(r.s, '<span class="when">' + esc(whenText(r.t)) + "</span>")).join("") : '<div class="note">No songs yet. Use New song or Import to get started.</div>';
+}
+// Star or unstar a song. Favorites are a field on the song, so they sync like everything else.
+function toggleFav(id) {
+  if (song && song.id === id) { commit(() => { song.fav = !song.fav; if (!song.fav) delete song.fav; }); flushSave(); const m = songs.get(id); if (m) { if (song.fav) m.fav = true; else delete m.fav; } }
+  else {
+    const src = songs.get(id); if (!src) return;
+    const x = clone(src); if (x.fav) delete x.fav; else x.fav = true; x.updatedAt = Date.now();
+    songs.set(id, x); persistSong(x).catch(() => toast("Couldn’t save that favorite. Try again in a moment."));
+  }
+  renderSongList();
 }
 function wireHome() {
   $("btnHome").onclick = showHome;
@@ -2065,7 +2090,7 @@ function wireHome() {
   $("homeNew").onclick = () => $("btnNew").click();
   $("homeImport").onclick = () => $("btnOpen").click();
   document.querySelectorAll("[data-htab]").forEach(b => b.onclick = () => setHomeTab(b.dataset.htab));
-  $("homeRecent").addEventListener("click", (e) => { const o = e.target.closest("[data-home-open]"); if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); } });
+  $("homeRecent").addEventListener("click", (e) => { const st = e.target.closest("[data-star]"); if (st) { toggleFav(st.dataset.star); return; } const o = e.target.closest("[data-home-open]"); if (o) { const s = songs.get(o.dataset.homeOpen); if (s) loadSong(clone(s), false); } });
   // The app opens on Home, so put the Library panel in place now (before, it only moved there when a tab was clicked).
   if (homeOn()) { document.documentElement.classList.add("at-home"); setHomeTab(homeTab); }
 }
@@ -2095,7 +2120,7 @@ function renderLibrary() {
   const groups = []; list.forEach(s => { const L = letterOf(s); if (!groups.length || groups[groups.length - 1].L !== L) groups.push({ L, items: [] }); groups[groups.length - 1].items.push(s); });
   $("letters").innerHTML = list.length > 8 ? groups.map(g => '<button data-letter="' + g.L + '">' + g.L + "</button>").join("") : "";
   const catName = (id) => (categories.find(c => c.id === id) || {}).name;
-  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '">' + (selecting ? '<input type="checkbox" class="pick" data-pick="' + esc(s.id) + '" aria-label="Select ' + esc(s.title || "song") + '"' + (picked.has(s.id) ? " checked" : "") + ">" : "") + '<button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", hymnalText(s), (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button>' + (selecting ? "" : '<button class="del" data-del="' + esc(s.id) + '">Delete</button>') + "</div>").join("")).join("")
+  $("songList").innerHTML = list.length ? groups.map(g => '<div class="lettergroup" data-group="' + g.L + '">' + g.L + "</div>" + g.items.map(s => '<div class="songrow' + (song && s.id === song.id ? " cur" : "") + '">' + (selecting ? '<input type="checkbox" class="pick" data-pick="' + esc(s.id) + '" aria-label="Select ' + esc(s.title || "song") + '"' + (picked.has(s.id) ? " checked" : "") + ">" : "") + '<button class="open" data-open="' + esc(s.id) + '"><span class="t">' + esc(s.title || "Untitled song") + '</span><span class="s">' + esc([s.artist, s.key ? "Key " + s.key : "", hymnalText(s), (s.categories || []).map(catName).filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No details yet") + '</span></button>' + (selecting ? "" : starHTML(s)) + (selecting ? "" : '<button class="del" data-del="' + esc(s.id) + '">Delete</button>') + "</div>").join("")).join("")
     : '<div class="note">' + (q ? "No songs match “" + esc(q) + "”." : all.length ? "No songs in this category yet. Open a song and tick the category under its title." : "No saved songs yet. Songs save automatically as you edit.") + "</div>";
   shownIds = list.map(s => s.id);
   [...picked].forEach(id => { if (!songs.has(id)) picked.delete(id); });
@@ -2131,6 +2156,7 @@ function onSongListClick(e) {
     if (box.checked) picked.add(id); else picked.delete(id);
     renderSelBar(); return;
   }
+  const st = e.target.closest("[data-star]"); if (st) { toggleFav(st.dataset.star); return; }
   const o = e.target.closest("[data-open]"); const d = e.target.closest("[data-del]");
   if (o) { const s = songs.get(o.dataset.open); if (s) { loadSong(clone(s), false); closeModals(); } }
   if (d) {
@@ -3341,6 +3367,7 @@ function applyPerfClasses() { $("perf").classList.toggle("dark", perfCfg.theme =
 function bindPerformance() {
   $("btnPerform").onclick = performCurrent;
   wireHome();
+  $("starBtn").onclick = () => { toggleFav(song.id); toast(song.fav ? "Added to Favorites" : "Removed from Favorites"); };
   window.addEventListener("keydown", onPerfKey, true);
   const st = $("perfStage"); let down = null;
   st.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
