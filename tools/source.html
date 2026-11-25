@@ -124,6 +124,9 @@ select.key { min-height: 38px; border: 1px solid var(--line); border-radius: 8px
 .seg { display: inline-flex; flex-direction: column; }
 .ch { font-weight: 700; color: var(--chord); white-space: pre; padding-right: .55em; min-height: 1.3em; line-height: 1.3; }
 .line.nochords .ch { display: none; }
+.line.barline .seg { flex-direction: row; align-items: baseline; }
+.line.barline .ch { min-height: 0; padding-right: .3em; }
+.line.barline .ly { color: var(--muted); font-weight: 600; }
 .ly { display: flex; white-space: pre; line-height: 1.35; }
 .ly .gap { flex: 1 0 0; min-width: 0; }
 .ly .hy { flex: 1 0 auto; text-align: center; padding: 0 .15em; }
@@ -877,7 +880,7 @@ function typeFromLabel(label) {
 }
 const LABEL_WORD = "(?:pre[\\s-]?chorus|chorus|refrain|verse|bridge|tag|intro|outro|coda|ending|interlude|turnaround|instrumental|solo|vamp|misc\\.?)(?:\\s*\\d+[a-h]?(?:\\s*\\/\\s*\\d+[a-h]?)*|[a-h](?=\\s*:?\\s*$))?";
 const LABEL_MOD = "(?:(?:breakdown|final|last|first|half|double|soft|quiet|big|acoustic|a\\s?cappella|reprise|modulated|key\\s+change|extended|short|full|band|drum|piano)\\s+)?";
-const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*(?:x\\s*\\d+|\\d+\\s*x)\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,40}?)\\s*\\))?\\s*:?\\s*$", "i");
+const LABEL_RE = new RegExp("^\\s*[\\[(]?\\s*(" + LABEL_MOD + LABEL_WORD + "(?:\\s*[/&]\\s*" + LABEL_WORD + ")*)\\s*[\\])]?\\s*:?\\s*(?:\\(?\\s*(?:x\\s*\\d+|\\d+\\s*x)\\s*\\)?)?\\s*(?:\\(\\s*([^()]{1,80}?)\\s*\\))?\\s*:?\\s*$", "i");
 // "Outro (over Chorus)" keeps its note; the note doesn't decide the section type.
 function labelFrom(m) { return normLabel(m[1]) + (m[2] && !/^x\s*\d+$/i.test(m[2]) ? " (" + m[2].trim() + ")" : ""); }
 function normLabel(raw) {
@@ -946,7 +949,7 @@ function chordParts(tok) {
   if (/^[A-G].*-[A-G]/.test(tok) && tok.split("-").every(isChord)) return [{ off: 0, name: tok }];
   return null;
 }
-const BAR_RE = /^(\|+:?|:?\|+|\/|-|x\d+|\(x\d+\)|%|\|\||\.)$/i;
+const BAR_RE = /^(\|+:?|:?\|+|\/|-|x\d+|\d+x|\(x\d+\)|%|\|\||\.{1,3}|ˬ)$/i;
 // "Eb – F" or "Eb–F" (en/em dash) on a chord line means two chords over one word: keep them as one "Eb-F" chord
 // at the first chord's position. A spaced plain hyphen ("C - G") is left alone: charts use it to mirror a
 // hyphenated syllable below, with each chord on its own syllable. Same length in, same length out, so every other chord keeps its column.
@@ -1024,10 +1027,10 @@ function parseSongText(input, opts) {
     if (raw.filter(l => /^\S{8,}$/.test(l.trim()) && /[^.\s]\.+[^.\s]|^\.+\S/.test(l.trim())).length >= 4)
       for (let i = 0; i < raw.length; i++) if (!/\s/.test(raw[i].trim()) && /\.\S|\S\./.test(raw[i]) && !/^\S+\.(chorded|pdf|txt|docx?)$/i.test(raw[i].trim())) raw[i] = raw[i].replace(/\.(?!(?:chorded|pdf)\b)/g, " ");
     // Planning Center's own chord chart header: "Abide [G, 48 bpm, 6/8]" then "[RUMC Worship] by Aaron Keyes, …"
-    const i = raw.findIndex(l => l.trim()); const h = i >= 0 && /^(.+?)\s*\[([A-G][#b]?m?)(?:,\s*(\d+)\s*bpm)?(?:,\s*(\d+\/\d+))?\]\s*$/.exec(raw[i].trim());
+    const i = raw.findIndex(l => l.trim()); const h = i >= 0 && /^(.+?)\s*[\[(]([A-G][#b]?m?)(?:,\s*(\d+)\s*bpm)?(?:,\s*(\d+\/\d+))?[\])]\s*$/.exec(raw[i].trim());
     if (h) {
       meta.title = h[1].trim(); if (h[3]) meta.tempo = h[3]; if (h[4]) meta.time = h[4]; raw[i] = "";
-      const j = raw.findIndex(l => l.trim()); const by = j >= 0 && /^\[[^\]]*\]\s*(?:by\s+(.+))?$/.exec(raw[j].trim()); if (by) { if (by[1]) meta.artist = by[1].trim(); raw[j] = ""; }
+      const j = raw.findIndex(l => l.trim()); const by = j >= 0 && /^[\[(][^\])]*[\])]\s*(?:by\s+(.+))?$/.exec(raw[j].trim()); if (by) { if (by[1]) meta.artist = by[1].trim(); raw[j] = ""; }
       for (let k = 0; k < raw.length; k++) if (/^\S+\.chorded$/i.test(raw[k].trim())) raw[k] = "";
     }
   }
@@ -1047,7 +1050,7 @@ function parseSongText(input, opts) {
   for (let i = 0; i < raw.length; i++) {
     const line = raw[i];
     const trimmed = line.trim();
-    if (/^(CCLI|©|\(c\)|Copyright|For use solely|Note: Reproduction|www\.ccli)/i.test(trimmed) || /CCLI License/i.test(trimmed)) { foot.push(trimmed); prevFoot = true; continue; }
+    if (/^(CCLI|©|\(c\)|Copyright|For use solely|Note: Reproduction|www\.ccli)/i.test(trimmed) || /CCLI License|©|\bpublic domain\b|all rights reserved/i.test(trimmed)) { foot.push(trimmed); prevFoot = true; continue; }
     if (prevFoot && trimmed && !inEnv && /^(©|\(c\)|copyright)/i.test(foot[foot.length - 1]) && !/\[/.test(trimmed) && FOOT_MORE_RE.test(trimmed) && !isChordLine(trimmed) && !LABEL_RE.test(trimmed)) { foot[foot.length - 1] += " " + trimmed; continue; }
     if (trimmed) prevFoot = false;
     if (isCP) {
@@ -1077,7 +1080,7 @@ function parseSongText(input, opts) {
     if (!inEnv && !/\[/.test(trimmed) && metaLine(meta, trimmed, !blocks.length && !(cur && cur.lines.length))) continue;
     if (/^page \d+ of \d+$/i.test(trimmed) || /\(continued\)$/i.test(trimmed)) continue;
     if (opts.fromFile && (/^\d{1,2}$/.test(trimmed) || (meta.title && trimmed.toLowerCase() === meta.title.toLowerCase() + " -"))) continue;
-    if (meta.title) { const hm = /^(.+?)\s*[-–]\s*\d+$/.exec(trimmed); if (hm && hm[1].toLowerCase() === meta.title.toLowerCase()) continue; }
+    if (meta.title) { const hm = /^(.+?)\s*[-–]\s*\d+$/.exec(trimmed); if (hm && hm[1].toLowerCase().startsWith(meta.title.toLowerCase())) continue; }
     if (HYMNAL_RE.test(trimmed) && !inEnv) { meta.hymnal = meta.hymnal || trimmed; continue; }
     const lm = LABEL_RE.exec(trimmed);
     if (lm && !inEnv) { flush(); cur = { label: labelFrom(lm), type: null, lines: [] }; continue; }
@@ -1299,13 +1302,17 @@ function transposeBy(semis, targetKey) {
 // A line is split into columns at every chord. Each column holds its chord above its lyric text.
 // When a chord is wider than its syllable the column widens; at a syllable break that space gets a hyphen,
 // inside an unbroken word it is flagged as "crowded" so the person can choose to split the word.
+// A line with chords but no words, only spaces and rhythm marks ("||: C | G | Am F :|| x2"): chords and bar
+// lines print on one row instead of chords above an empty lyric.
+const BARTEXT_RE = /^[\s|:.%ˬ\/\-–x\d()]*$/i;
+function isBarLine(l) { return !!(l && l.chords && l.chords.length && BARTEXT_RE.test(l.text)); }
 function lineHTML(l, ctx) {
   const T = l.text, n = T.length;
   if (!n && !l.chords.length) return '<div class="line blank-line"></div>';
   const br = new Set(l.breaks);
   const bounds = [...new Set([0].concat(l.chords.map(c => Math.min(c.pos, n))))].sort((a, b) => a - b);
   const chordAt = new Map(l.chords.map(c => [Math.min(c.pos, n), c.name]));
-  let h = '<div class="line' + (l.chords.length ? "" : " nochords") + '"' + (ctx ? ' data-s="' + ctx.sec + '" data-l="' + ctx.li + '"' : "") + ">";
+  let h = '<div class="line' + (l.chords.length ? "" : " nochords") + (isBarLine(l) ? " barline" : "") + '"' + (ctx ? ' data-s="' + ctx.sec + '" data-l="' + ctx.li + '"' : "") + ">";
   for (let bi = 0; bi < bounds.length; bi++) {
     const a = bounds[bi], b = bi + 1 < bounds.length ? bounds[bi + 1] : n; const last = bi === bounds.length - 1;
     const cn = chordAt.get(a);
@@ -2223,7 +2230,21 @@ function pdfChord(name, S, key) { let n = S.chords === "numerals" ? toRoman(name
 
 // Lays one lyric line into one or more rows that fit `width`. Chords never overlap: a chord pushes the
 // lyric to the right when it is wider than the syllable under it, and a syllable break in that gap gets a hyphen.
+function layoutBarLine(l, S, M, k, width, key) {
+  // Chords and rhythm marks share one row: "||:  C  |  G  |  Am  F  :||  x2"
+  const cs = k * S.chordSize, cb = !!S.chordBold, gap = cs * 0.45; const T = l.text;
+  const at = new Map(); l.chords.forEach(c => at.set(Math.min(c.pos, T.length), (at.has(Math.min(c.pos, T.length)) ? at.get(Math.min(c.pos, T.length)) + " " : "") + pdfChord(c.name, S, key)));
+  const toks = []; let i = 0;
+  while (i <= T.length) {
+    if (at.has(i)) toks.push({ c: true, s: at.get(i) });
+    if (i < T.length && T[i] !== " ") { let j = i; while (j < T.length && T[j] !== " " && !(j > i && at.has(j))) j++; toks.push({ c: false, s: T.slice(i, j) }); i = j; } else i++;
+  }
+  const rows = [[]]; let x = 0;
+  toks.forEach(t => { const w = t.c ? M(t.s, cb, cs) : M(t.s, true, cs); if (x > 0 && x + w > width) { rows.push([]); x = 0; } rows[rows.length - 1].push({ x, t }); x += w + gap; });
+  return rows.map(r => ({ h: cs * 1.25 + cs * 0.35 * S.lineSpacing, items: r.map(o => ({ t: "text", x: o.x, dy: cs * 0.95, s: o.t.s, size: cs, bold: o.t.c ? cb : true, color: o.t.c ? S.chordColor : "#777777" })) }));
+}
 function layoutLine(l, S, M, k, width, key) {
+  if (isBarLine(l) && S.chords !== "hidden") return layoutBarLine(l, S, M, k, width, key);
   const hide = S.chords === "hidden";
   const T = l.text.replace(/\s+$/, (sp) => l.chords.some(c => c.pos >= l.text.length - sp.length) ? sp : "");
   const cs = k * S.chordSize, ls = k * S.lyricSize, cb = !!S.chordBold;
@@ -2590,7 +2611,8 @@ function pdfColumnLines(items) {
     for (const it of r.items) {
       measureCtx.font = it.h + "px Arial, Helvetica, sans-serif";
       const spaceW = measureCtx.measureText(" ").width || it.h * 0.28;
-      if (lastEnd !== null && it.x - lastEnd > spaceW * 0.5) { const n = it.x - lastEnd > spaceW * 3.5 ? 3 : 1; for (let k = 0; k < n; k++) { chars.push(lastEnd + k * spaceW); text += " "; } }
+      // Two chords printed tight together ("F C" over one word) still need a space between them.
+      if (lastEnd !== null && (it.x - lastEnd > spaceW * 0.5 || (/\S$/.test(text) && isChord(it.s.trim()) && isChord(text.split(" ").pop())))) { const n = it.x - lastEnd > spaceW * 3.5 ? 3 : 1; for (let k = 0; k < n; k++) { chars.push(lastEnd + k * spaceW); text += " "; } }
       const full = measureCtx.measureText(it.s).width || 1; const sc = it.w / full; let acc = 0;
       for (const ch of it.s) { chars.push(it.x + acc * sc); acc += measureCtx.measureText(ch).width; text += ch; }
       lastEnd = it.x + it.w;
@@ -2599,6 +2621,8 @@ function pdfColumnLines(items) {
   });
   const tokens = (r) => { const out = []; const re = /\S+/g; let m; while ((m = re.exec(r.text))) out.push({ s: m[0], i: m.index, x: r.chars[m.index], end: r.chars[m.index + m[0].length - 1] + r.h * 0.55 }); return out; };
   const SUFFIX_RE = /^(?:\d{1,2}|o\d*|sus\d?|maj\d*|add\d+|m\d*|min\d*|dim\d?|aug|[b#]\d+|\([^()]*\)|\/[A-G][#b]?)+$/i;
+  // Square brackets in a PDF are the chart's own ("[coconut]", "[C]"), not ChordPro chords: make them parentheses.
+  rows.forEach(r => { r.text = r.text.replace(/\[/g, "(").replace(/\]/g, ")"); });
   // Some printed charts use dots for spaces so chords line up ("For.my.waking.breath"): make them spaces again (same length).
   if (rows.filter(r => /^\S{8,}$/.test(r.text.trim()) && /[^.\s]\.+[^.\s]|^\.+\S/.test(r.text.trim())).length >= 4)
     rows.forEach(r => { if (!/\s/.test(r.text.trim()) && /\.\S|\S\./.test(r.text) && !/^\S+\.(chorded|pdf|txt|docx?)$/i.test(r.text.trim())) r.text = r.text.replace(/\./g, " "); });
@@ -2639,11 +2663,18 @@ function pdfColumnLines(items) {
     const r = rows[i], n = rows[i + 1];
     if (r.chord && n && !n.chord && n.text.trim() && !LABEL_RE.test(n.text.trim()) && (r.y - n.y) < Math.max(r.h, n.h) * 2.2) {
       let t = n.text; const ins = [];
-      const chordsAt = []; tokens(r).forEach(tk => (chordParts(tk.s) || []).forEach(c => chordsAt.push({ x: r.chars[tk.i + c.off], name: c.name })));
+      // A rhythm figure printed after the end of the lyric ("| D Dsus D ˬ D Dsus D |") is its own line.
+      let rt = tokens(r), tail = null; const tj = rt.findIndex(tk => /^:?\|/.test(tk.s) && tk.x > n.end - n.h * 0.2);
+      if (tj > 0 && rt.slice(tj).some(tk => chordParts(tk.s))) { tail = rt.slice(tj); rt = rt.slice(0, tj); }
+      const chordsAt = []; rt.forEach(tk => (chordParts(tk.s) || []).forEach(c => chordsAt.push({ x: r.chars[tk.i + c.off], end: tk.end, name: c.name })));
       // Charts put chords at the start of a word or syllable, so snap to the nearest one; this also
       // absorbs small drift in where we estimate each letter sits.
       const starts = []; for (let k = 0; k < t.length; k++) if (t[k] !== " " && !HY.test(t[k]) && (k === 0 || t[k - 1] === " " || HY.test(t[k - 1]))) starts.push(k);
-      chordsAt.sort((a, b) => a.x - b.x).forEach(ch => { let idx = -1, bd = Infinity;
+      // Chords printed before the lyric starts are a lead-in ("D  G   'Cause this world"): keep them in front.
+      const lead = chordsAt.filter(c => c.end < n.chars[0] - n.h * 0.3).sort((a, b) => a.x - b.x);
+      // The chord nearest the lyric (charts often indent the words a little) still belongs on the first word.
+      lead.pop(); const body = chordsAt.filter(c => !lead.includes(c));
+      body.sort((a, b) => a.x - b.x).forEach(ch => { let idx = -1, bd = Infinity;
         starts.forEach(k => { if (ins.some(q => q[0] === k)) return; const d = Math.abs(n.chars[k] - ch.x); if (d < bd) { bd = d; idx = k; } });
         if (idx >= 0 && bd > n.h * 1.6) { idx = -1; bd = Infinity; n.chars.forEach((cx, k) => { const d = Math.abs(cx - ch.x); if (d < bd - 0.01 && !ins.some(q => q[0] === k)) { bd = d; idx = k; } }); }
         if (idx >= 0 && ch.x > n.end + n.h * 0.2) idx = -1;
@@ -2653,7 +2684,9 @@ function pdfColumnLines(items) {
       const keep = t.replace(/\s+$/, "").length; let packed = ""; const map = [];
       for (let q = 0; q <= t.length; q++) { map[q] = packed.length; if (q < t.length && !(t[q] === " " && t[q - 1] === " " && q < keep)) packed += t[q]; }
       let tt = packed; ins.map(([idx, c]) => [map[idx], c]).sort((a, b) => b[0] - a[0]).forEach(([idx, c]) => { tt = tt.slice(0, idx) + "[" + c + "]" + tt.slice(idx); });
+      if (lead.length) tt = lead.sort((a, b) => a.x - b.x).map(c => "[" + c.name + "]  ").join("") + tt.replace(/^\s+/, "");
       out.push({ y: n.y, s: tt }); i++;
+      if (tail) out.push({ y: n.y - 0.01, s: tail.map(tk => { const cp = chordParts(tk.s); return cp ? cp.map(c => "[" + c.name + "]").join(" ") : tk.s; }).join("  ") });
     } else if (r.chord) {
       out.push({ y: r.y, s: tokens(r).map(tk => { const cp = chordParts(tk.s); return cp ? cp.map(c => "[" + c.name + "]").join(" ") : tk.s; }).join("  ") });
     } else out.push({ y: r.y, s: r.text });
@@ -3181,6 +3214,6 @@ connectStore().then(() => setTimeout(checkIncomingShare, 300));
 window.addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
 ["online", "offline"].forEach(t => window.addEventListener(t, () => { if (storeMode !== "cloud") return; setStatus(navigator.onLine ? "Back online. Syncing…" : "Offline. Changes sync when you’re back online."); if (navigator.onLine) setTimeout(() => setStatus("All changes saved"), 2500); }));
 document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
-window.__ccb = { parseSongText, fileToSong, toChordPro, toRoman, get song() { return song; } };
+window.__ccb = { parseSongText, fileToSong, pdfToText, toChordPro, toRoman, get song() { return song; } };
 })();
 </script>
