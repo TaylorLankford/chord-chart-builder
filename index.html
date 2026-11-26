@@ -833,7 +833,7 @@ html.at-home, html.at-home body { overflow: hidden; }
     <label class="field grow">Title<input id="newTitle" placeholder="Song title"></label>
     <label class="field grow">Artist / author<input id="newArtist"></label>
   </div>
-  <textarea id="newText" placeholder="Verse 1&#10;Blessed assurance, Jesus is mine&#10;Oh what a foretaste of glory divine&#10;&#10;Chorus&#10;This is my story, this is my song"></textarea>
+  <textarea id="newText" placeholder="Verse 1&#10;I come from Alabama with a banjo on my knee&#10;I&#39;m goin&#39; to Louisiana, my true love for to see&#10;&#10;Chorus&#10;Oh! Susanna, oh don&#39;t you cry for me&#10;For I come from Alabama with a banjo on my knee&#10;&#10;Verse 2&#10;I had a dream the other night when everything was still&#10;I thought I saw Susanna a-coming down the hill&#10;&#10;Turnaround&#10;  G     C     G   D   G&#10;&#10;Bridge&#10;Down the river, round the bend, many miles to go&#10;&#10;Chorus"></textarea>
   <div class="acts">
     <button class="btn" id="newCancel">Cancel</button>
     <button class="btn primary" id="newBuild">Build song</button>
@@ -1414,37 +1414,53 @@ function toChordPro(song) {
   return o.join("\n") + "\n";
 }
 
-/* ---------- Example (public-domain hymn, 1873) ---------- */
-const EXAMPLE = `{title: Blessed Assurance}
-{artist: Fanny Crosby & Phoebe Knapp (example song)}
-{key: D}
-{tempo: 72}
-{time: 9/8}
+/* ---------- Example (public domain: Stephen Foster, 1848; the bridge is written for this example) ---------- */
+const EXAMPLE = `{title: Oh! Susanna}
+{artist: Stephen Foster, 1848 (example song)}
+{key: G}
+{tempo: 120}
+{time: 4/4}
+
+{start_of_verse: Intro}
+{comment: banjo, light and bouncy}
+| [G]   | [G]   | [D]   | [G]   |
+{end_of_verse}
 
 {start_of_verse: Verse 1}
-[D]Blessed as-[G]surance, [D]Jesus is mine!
-Oh, what a [A]foretaste of [E7]glory di-[A]vine!
-[D]Heir of sal-[G]vation, [D]purchase of God,
-[G]Born of His [D]Spirit, [A7]washed in His [D]blood.
+I [G]come from Alabama with a [D]banjo on my knee,
+I'm [G]goin' to Louisiana, my [D]true love for to [G]see.
+It [G]rained all night the day I left, the [D]weather it was dry;
+The [G]sun so hot I froze to death, Su-[D]sanna, don't you [G]cry.
 {end_of_verse}
 
 {start_of_chorus: Chorus}
-[D]This is my story, this is my song,
-[A]Praising my Savior all the day [D]long;
-[D]This is my [G]story, [D]this is my song,
-[G]Praising my [D]Savior [A7]all the day [D]long.
+{comment: everybody sings}
+[C]Oh! Susanna, oh [G]don't you cry for [D]me,
+For I [G]come from Alabama with a [D]banjo on my [G]knee.
 {end_of_chorus}
 
 {start_of_verse: Verse 2}
-[D]Perfect sub-[G]mission, [D]perfect delight,
-Visions of [A]rapture now [E7]burst on my [A]sight;
-[D]Angels de-[G]scending [D]bring from above
-[G]Echoes of [D]mercy, [A7]whispers of [D]love.
+I [G]had a dream the other night, when [D]everything was still;
+I [G]thought I saw Susanna a-[D]coming down the [G]hill.
+The [G]buckwheat cake was in her mouth, the [D]tear was in her eye;
+Says [G]I, "I'm coming from the south," Su-[D]sanna, don't you [G]cry.
 {end_of_verse}
 
 {chorus}
+
+{start_of_verse: Turnaround}
+||: [G]   | [C]   | [G]   [D]   | [G]   :||
+{end_of_verse}
+
+{start_of_bridge: Bridge}
+{comment: example bridge, not part of Foster's song}
+[C]Down the river, [G]round the bend, [C]many miles to [D]go,
+[C]When I find her [G]at the end, I'll [A7]never let her [D]go.
+{end_of_bridge}
+
+{chorus}
 `;
-function exampleSong() { const s = parseSongText(EXAMPLE); s.id = "example"; s.categories = ["hymns"]; return s; }
+function exampleSong() { const s = parseSongText(EXAMPLE); s.id = "example"; s.categories = ["secular"]; return s; }
 
 /* ---------- State ---------- */
 let song = null;
